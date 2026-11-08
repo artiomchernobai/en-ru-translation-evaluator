@@ -7,7 +7,7 @@ characters, including quotation marks and dialogue dashes.
 from __future__ import annotations
 
 import re
-from src.processing.boundary_candidate_detector import BoundaryCandidate
+from src.processing.boundary_candidate_detector import BoundaryCandidateDetector
 from src.processing.ru_boundary_classifier import dash_boundary_allowed
 
 
@@ -23,8 +23,8 @@ class SentenceSegmenter:
         self.line_breaks_are_paragraphs = line_breaks_are_paragraphs
         self.models = dict(models or {})
         self.detectors = {
-            "ru": BoundaryCandidate("ru"),
-            "en": BoundaryCandidate("en"),
+            "ru": BoundaryCandidateDetector("ru"),
+            "en": BoundaryCandidateDetector("en"),
         }
 
     def _get_nlp(self, language: str):
@@ -161,7 +161,7 @@ class SentenceSegmenter:
         nlp = self._get_nlp(language)
         base = self._spacy_starts(text, nlp)
         if language == "en":
-            from english_dialogue_boundaries import _spans
+            from src.processing.boundary_candidate_detector import _spans
             spans = _spans(text)
             opening_quotes = {left for left, _ in spans}
             closing_quotes = {right for _, right in spans}

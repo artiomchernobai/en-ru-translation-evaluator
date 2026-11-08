@@ -18,7 +18,7 @@ class BoundaryAwareSegmenter:
         self.builder = builder or BoundaryDatasetBuilder(context_size=ru_classifier.context_size)
         self.segmenter = segmenter or SentenceSegmenter()
         if postprocessor is None:
-            from postprocessor import SentencePostprocessor
+            from src.processing.postprocessor import SentencePostprocessor
             postprocessor = SentencePostprocessor()
         self.postprocessor = postprocessor
 
