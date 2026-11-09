@@ -95,6 +95,9 @@ class PipelineTests(unittest.TestCase):
             (root / "src").mkdir()
             shutil.copytree(Path(__file__).resolve().parents[1], root / "src" / "ui",
                             ignore=shutil.ignore_patterns("__pycache__", "tests"))
+            shutil.copytree(Path(__file__).resolve().parents[2] / "external_tools",
+                            root / "src" / "external_tools",
+                            ignore=shutil.ignore_patterns("__pycache__"))
             (root / "src" / "processing").mkdir()
             (root / "src" / "processing" / "text_normalizer.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
             raw = folder(root, "raw") / "original-rus.txt"

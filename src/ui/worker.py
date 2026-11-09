@@ -8,6 +8,7 @@ import traceback
 from pathlib import Path
 
 from .config import folder
+from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE
 from .jobs import write_json
 from .pipeline import run_stage
 
@@ -24,7 +25,8 @@ def run_job(request_file: Path) -> int:
     write_json(status_path, status)
     print(f"Задача {job_id} запущена. Проект: {root}", flush=True)
     try:
-        run_stage(root, request["stage"], request["documents"], int(request["max_size"]))
+        run_stage(root, request["stage"], request["documents"], int(request["max_size"]),
+                  del_percentile_frac=request.get("del_percentile_frac", DEFAULT_DELETION_PERCENTILE))
     except Exception:
         print("\nОШИБКА:", flush=True)
         traceback.print_exc()
