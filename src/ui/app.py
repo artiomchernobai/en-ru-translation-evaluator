@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 import streamlit as st
 
 from src.processing.alignment import validate_alignment
+from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE
 from src.ui.alignment_view import expand_alignment, parse_alignment, sentences
 from src.ui.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
 from src.ui.file_browser import (
@@ -195,7 +196,13 @@ def render_controls() -> None:
             "Документы", options=list(DOCUMENTS), default=list(DOCUMENTS), key="ui_docs",
             format_func=lambda x: x.replace("-translation-en", "")
         )
-        max_size = st.selectbox("Размер группы Vecalign", [2, 3, 4], index=0)
+        max_size = st.selectbox("Размер группы Vecalign", [2, 3, 4], index=0,
+                                help="Суммарное число сегментов с обеих сторон: 3 допускает 1:2 и 2:1; 4 — также 1:3, 3:1 и 2:2.")
+        del_percentile_frac = st.number_input(
+            "Штраф пропуска Vecalign (перцентиль)", min_value=0.0, max_value=1.0,
+            value=DEFAULT_DELETION_PERCENTILE, step=0.05, format="%.2f", key="del_percentile_frac",
+            help="По умолчанию 0.20. Меньше — пропуск дешевле и чаще выбирается вместо объединения. "
+                 "Слишком низкое значение может создать ложные пропуски. Применяется к выравниванию и полному запуску.")
         current = st.session_state.get("ui_job")
         running = bool(current and current["process"].poll() is None)
         if current and not running and not current.get("completion_rendered"):
@@ -205,11 +212,11 @@ def render_controls() -> None:
             status = read_status(ROOT, current["id"])
             st.caption(f"Последняя задача: {current['stage']} · {status.get('state', 'unknown')}")
         if st.button("▶ Запустить весь пайплайн", key="all", disabled=running or not choices, use_container_width=True, type="primary"):
-            submit("all", choices, max_size)
+            submit("all", choices, max_size, del_percentile_frac)
         st.divider()
         for stage, title in STAGE_NAMES.items():
             if st.button(title, key=f"stage_{stage}", disabled=running or not choices, use_container_width=True):
-                submit(stage, choices, max_size)
+                submit(stage, choices, max_size, del_percentile_frac)
         if running:
             st.divider()
             if st.button("■ Остановить задачу", use_container_width=True):
@@ -219,9 +226,10 @@ def render_controls() -> None:
         st.caption("Ошибки модулей, пути и вывод внешних инструментов отображаются в нижнем журнале.")
 
 
-def submit(stage: str, docs: list[str], max_size: int) -> None:
+def submit(stage: str, docs: list[str], max_size: int,
+           del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> None:
     try:
-        st.session_state["ui_job"] = start_job(ROOT, stage, docs, max_size)
+        st.session_state["ui_job"] = start_job(ROOT, stage, docs, max_size, del_percentile_frac=del_percentile_frac)
         st.session_state["ui_console_open"] = True
         st.rerun()
     except (OSError, ValueError) as exc:

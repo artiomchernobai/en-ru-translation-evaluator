@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import DOCUMENTS, STAGES, folder
+from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE, validate_deletion_percentile
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
@@ -27,7 +28,8 @@ def job_paths(root: Path, job_id: str) -> tuple[Path, Path, Path]:
             directory / f"{job_id}.log")
 
 
-def start_job(root: Path, stage: str, document_names: list[str], max_size: int) -> dict:
+def start_job(root: Path, stage: str, document_names: list[str], max_size: int,
+              del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> dict:
     """Start one isolated worker. The UI caller enforces one live job per session."""
     if stage not in (*STAGES, "all"):
         raise ValueError(f"Unknown stage: {stage}")
@@ -36,6 +38,7 @@ def start_job(root: Path, stage: str, document_names: list[str], max_size: int) 
     if max_size not in (2, 3, 4):
         raise ValueError("max_size должен быть 2, 3 или 4")
 
+    del_percentile_frac = validate_deletion_percentile(del_percentile_frac)
     job_id = uuid.uuid4().hex[:12]
     request_path, status_path, log_path = job_paths(root, job_id)
     write_json(request_path, {
@@ -43,6 +46,7 @@ def start_job(root: Path, stage: str, document_names: list[str], max_size: int) 
         "stage": stage,
         "documents": list(dict.fromkeys(document_names)),
         "max_size": max_size,
+        "del_percentile_frac": del_percentile_frac,
         "project_root": str(root.resolve()),
     })
     write_json(status_path, {"state": "queued", "stage": stage, "started": time.time()})

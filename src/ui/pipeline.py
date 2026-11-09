@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE, validate_deletion_percentile
 from .config import DOCUMENTS, SOURCE, STAGES, TARGETS, folder
 
 
@@ -129,7 +130,9 @@ def stage_embed(root: Path, docs: list[str], max_size: int) -> None:
         print(f"[LASER] {doc} -> {dest.relative_to(root)}", flush=True)
 
 
-def stage_align(root: Path, docs: list[str], max_size: int) -> None:
+def stage_align(root: Path, docs: list[str], max_size: int,
+                del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> None:
+    del_percentile_frac = validate_deletion_percentile(del_percentile_frac)
     if SOURCE not in docs:
         raise ValueError("Для Vecalign необходимо выбрать original-rus")
     targets = [doc for doc in TARGETS if doc in docs]
@@ -148,9 +151,10 @@ def stage_align(root: Path, docs: list[str], max_size: int) -> None:
             "target_embeddings_path": check_file(folder(root, "embeddings") / f"{target}.emb"),
             "output_path": dest,
             "alignment_max_size": max_size,
+            "del_percentile_frac": del_percentile_frac,
         }
         tools.align(**args)
-        print(f"[Vecalign] {SOURCE} -> {target}; max_size={max_size}: {dest.relative_to(root)}", flush=True)
+        print(f"[Vecalign] {SOURCE} -> {target}; max_size={max_size}; del_percentile_frac={del_percentile_frac}: {dest.relative_to(root)}", flush=True)
 
 
 def stage_corpus(root: Path, docs: list[str], max_size: int) -> None:
@@ -188,7 +192,9 @@ FUNCTIONS = {
 }
 
 
-def run_stage(root: Path, stage: str, docs: list[str], max_size: int) -> None:
+def run_stage(root: Path, stage: str, docs: list[str], max_size: int,
+              del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> None:
+    del_percentile_frac = validate_deletion_percentile(del_percentile_frac)
     if stage not in (*STAGES, "all"):
         raise ValueError(f"Неизвестный этап: {stage}")
     if not docs or any(doc not in DOCUMENTS for doc in docs):
@@ -198,5 +204,8 @@ def run_stage(root: Path, stage: str, docs: list[str], max_size: int) -> None:
     execution = STAGES if stage == "all" else (stage,)
     for step in execution:
         print(f"\n{'=' * 20} {step.upper()} {'=' * 20}", flush=True)
-        FUNCTIONS[step](root, docs, max_size)
+        if step == "align":
+            FUNCTIONS[step](root, docs, max_size, del_percentile_frac=del_percentile_frac)
+        else:
+            FUNCTIONS[step](root, docs, max_size)
     print("\nВсе выбранные этапы успешно завершены.", flush=True)

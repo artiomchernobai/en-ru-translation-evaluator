@@ -2,11 +2,24 @@
 from __future__ import annotations
 
 import os
+import math
 from pathlib import Path
 import shlex
 import subprocess
 import sys
 import tempfile
+
+
+DEFAULT_DELETION_PERCENTILE = 0.2
+
+
+def validate_deletion_percentile(value: float) -> float:
+    if isinstance(value, bool):
+        raise ValueError('del_percentile_frac must be a finite number between 0 and 1')
+    value = float(value)
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError('del_percentile_frac must be a finite number between 0 and 1')
+    return value
 
 
 class ExternalToolsRunner:
@@ -62,12 +75,14 @@ class ExternalToolsRunner:
     def align(self, source_path: Path, target_path: Path, source_overlap_path: Path,
               target_overlap_path: Path, source_embeddings_path: Path,
               target_embeddings_path: Path, output_path: Path,
-              alignment_max_size: int = 4, one_to_many: bool = False):
+              alignment_max_size: int = 4, one_to_many: bool = False,
+              del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE):
+        del_percentile_frac = validate_deletion_percentile(del_percentile_frac)
         command = self._vecalign_entry('vecalign') + [
             '-s', self._path(source_path), '-t', self._path(target_path),
             '--src_embed', self._path(source_overlap_path), self._path(source_embeddings_path),
             '--tgt_embed', self._path(target_overlap_path), self._path(target_embeddings_path),
-            '-a', str(alignment_max_size)]
+            '-a', str(alignment_max_size), '--del_percentile_frac', str(del_percentile_frac)]
         if one_to_many:
             command.append('--one_to_many')
         output_path = Path(output_path)
