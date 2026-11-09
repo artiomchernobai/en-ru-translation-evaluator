@@ -115,7 +115,7 @@ def stage_overlap(root: Path, docs: list[str], max_size: int) -> None:
         source = check_file(folder(root, "overlap_input") / f"{doc}.txt")
         dest = folder(root, "overlap_output") / f"{doc}.txt"
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tools.generate_overlaps(input_path=source, output_path=dest)
+        tools.generate_overlaps(input_path=source, output_path=dest, num_overlaps=max_size)
         print(f"[Overlap] {doc} -> {dest.relative_to(root)}", flush=True)
 
 

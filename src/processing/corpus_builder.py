@@ -1,15 +1,11 @@
 
 import json
-import re
+from src.processing.alignment import parse_alignment, parse_indices, validate_alignment
 
 from pathlib import Path
 
 
 class CorpusBuilder:
-
-    ALIGNMENT_PATTERN = re.compile(
-        r"^\[(.*?)\]:\[(.*?)\]:([0-9.eE+-]+)$"
-    )
 
     def load_sentences(self, json_path: Path) -> list[dict]:
         with Path(json_path).open("r", encoding="utf-8") as file:
@@ -37,59 +33,10 @@ class CorpusBuilder:
 
         return sentences
 
-    def parse_indices(self, value: str) -> list[int]:
-        value = value.strip()
-
-        if not value:
-            return []
-
-        try:
-            indices = [int(item.strip()) for item in value.split(",")]
-        except ValueError as e:
-            raise ValueError(f"Invalid indices: {value}") from e
-
-        if any(index < 0 for index in indices):
-            raise ValueError(f"Negative index found: {value}")
-
-        if len(indices) != len(set(indices)):
-            raise ValueError(f"Duplicate indices found: {value}")
-
-        return indices
+    parse_indices = staticmethod(parse_indices)
 
     def parse_alignments(self, alignment_path: Path) -> list[dict]:
-        alignments = []
-
-        with Path(alignment_path).open("r", encoding="utf-8") as file:
-            for line_number, line in enumerate(file, start=1):
-                line = line.strip()
-
-                if not line:
-                    continue
-
-                match = self.ALIGNMENT_PATTERN.match(line)
-
-                if not match:
-                    raise ValueError(
-                        f"Invalid alignment at line {line_number}: {line}"
-                    )
-
-                source_indices = self.parse_indices(match.group(1))
-                target_indices = self.parse_indices(match.group(2))
-
-                cost = float(match.group(3))
-
-                if not source_indices and not target_indices:
-                    raise ValueError(
-                        f"Both sides are empty at line {line_number}"
-                    )
-
-                alignments.append({
-                    "source_indices": source_indices,
-                    "target_indices": target_indices,
-                    "cost": cost
-                })
-
-        return alignments
+        return parse_alignment(Path(alignment_path).read_text(encoding="utf-8-sig"))
 
     def build_segment_text(
         self,
@@ -136,6 +83,8 @@ class CorpusBuilder:
         target_sentences = self.load_sentences(target_json)
 
         alignments = self.parse_alignments(alignment_path)
+
+        validate_alignment(alignments, len(source_sentences), len(target_sentences))
 
         segments = []
 

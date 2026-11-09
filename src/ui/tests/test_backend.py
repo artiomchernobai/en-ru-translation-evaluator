@@ -63,7 +63,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertFalse(expanded[2]["Индекс вне диапазона"])
 
     def test_out_of_range(self):
-        item = parse_alignment("[31]:[0]:0.1")
+        item = [{"ru_ids": [31], "en_ids": [0], "cost": 0.1}]
         self.assertTrue(expand_alignment(item, ["a"], ["b"])[0]["Индекс вне диапазона"])
 
     def test_invalid_format_rejected(self):
@@ -81,7 +81,7 @@ class PipelineTests(unittest.TestCase):
             import types
             fake = types.ModuleType("text_normalizer")
             fake.clean_text = lambda content: content + "!"
-            with patch.dict(sys.modules, {"text_normalizer": fake}):
+            with patch.dict(sys.modules, {"src.processing.text_normalizer": fake}):
                 run_stage(root, "clean", ["original-rus"], 2)
             self.assertEqual((folder(root, "cleaned") / "original-rus.txt").read_text(), "Привет!")
 
@@ -95,7 +95,8 @@ class PipelineTests(unittest.TestCase):
             (root / "src").mkdir()
             shutil.copytree(Path(__file__).resolve().parents[1], root / "src" / "ui",
                             ignore=shutil.ignore_patterns("__pycache__", "tests"))
-            (root / "text_normalizer.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
+            (root / "src" / "processing").mkdir()
+            (root / "src" / "processing" / "text_normalizer.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
             raw = folder(root, "raw") / "original-rus.txt"
             raw.parent.mkdir(parents=True)
             raw.write_text("  Текст  ", encoding="utf-8")
