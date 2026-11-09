@@ -1,6 +1,12 @@
 
+import argparse
 import json
 from pathlib import Path
+import sys
+
+# Support both `python -m src.processing.main` and direct script execution.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.external_tools.vecalign_tools import ExternalToolsRunner
 from src.processing.text_json_txt_exporter import TextJsonTxtExporter
@@ -27,6 +33,7 @@ OVERLAP_OUTPUT_DIR = BASE_DIR / "data" / "overlaps" / "output"
 EMBEDDINGS_DIR = BASE_DIR / "data" / "embeddings"
 ALIGNED_DIR = BASE_DIR / "data" / "aligned"
 CORPUS_DIR = BASE_DIR / "data" / "corpus"
+WORD_ALIGNMENT_DIR = BASE_DIR / "data" / "word_alignment"
 
 LASER_DIR = Path("/home/artiom/tools/laser-env/bin/python")
 VECALIGN_DIR = Path("/home/artiom/tools/vecalign-env/bin/python")
@@ -51,7 +58,8 @@ def create_directories():
         OVERLAP_OUTPUT_DIR,
         EMBEDDINGS_DIR,
         ALIGNED_DIR,
-        CORPUS_DIR
+        CORPUS_DIR,
+        WORD_ALIGNMENT_DIR
     ]
 
     for directory in directories:
@@ -166,8 +174,27 @@ def build_corpora(corpus_builder):
         )
 
 
-def main():
+def build_word_alignments():
+    from src.processing.word_alignment_io import align_word_files, configured_word_aligner
+    aligner = configured_word_aligner()
+    source_document = "original-rus"
+    for target_document in TARGET_DOCUMENTS:
+        align_word_files(
+            NORMALIZED_DIR / f"{source_document}.json",
+            NORMALIZED_DIR / f"{target_document}.json",
+            ALIGNED_DIR / f"{source_document}_{target_document}.align",
+            WORD_ALIGNMENT_DIR / f"{source_document}_{target_document}.json", aligner=aligner)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Text processing pipeline")
+    parser.add_argument('--stage', choices=('all', 'word_align'), default='all',
+                        help='Run all processing, or only word alignment on existing normalized files')
+    args = parser.parse_args(argv)
     create_directories()
+    if args.stage == 'word_align':
+        build_word_alignments()
+        return
 
     segmenter = SentenceSegmenter()
     postprocessor = SentencePostprocessor()
@@ -209,7 +236,10 @@ def main():
     # 4. Align documents using Vecalign
     align_documents(tools)
 
-    # 5. Build parallel corpora
+    # 5. Align words in the sentence groups
+    build_word_alignments()
+
+    # 6. Build parallel corpora
     build_corpora(corpus_builder)
 
     builder = BoundaryDatasetBuilder()

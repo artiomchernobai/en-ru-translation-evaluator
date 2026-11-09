@@ -157,6 +157,19 @@ def stage_align(root: Path, docs: list[str], max_size: int,
         print(f"[Vecalign] {SOURCE} -> {target}; max_size={max_size}; del_percentile_frac={del_percentile_frac}: {dest.relative_to(root)}", flush=True)
 
 
+def stage_word_align(root: Path, docs: list[str], max_size: int) -> None:
+    from src.processing.word_alignment_io import align_word_files, configured_word_aligner
+    if SOURCE not in docs or not any(doc in TARGETS for doc in docs):
+        raise ValueError("Для выравнивания слов выберите оригинал и хотя бы один перевод")
+    aligner = configured_word_aligner()
+    for target in (doc for doc in TARGETS if doc in docs):
+        align_word_files(
+            check_file(folder(root, "normalized") / f"{SOURCE}.json"),
+            check_file(folder(root, "normalized") / f"{target}.json"),
+            check_file(folder(root, "aligned") / f"{SOURCE}_{target}.align"),
+            folder(root, "word_alignment") / f"{SOURCE}_{target}.json", aligner=aligner)
+
+
 def stage_corpus(root: Path, docs: list[str], max_size: int) -> None:
     if SOURCE not in docs:
         raise ValueError("Для создания корпуса нужен original-rus")
@@ -188,6 +201,7 @@ FUNCTIONS = {
     "overlap": stage_overlap,
     "embed": stage_embed,
     "align": stage_align,
+    "word_align": stage_word_align,
     "corpus": stage_corpus,
 }
 
