@@ -18,6 +18,7 @@ STAGE_NAMES = {
     "overlap": "Группы предложений",
     "embed": "LASER — эмбеддинги",
     "align": "Vecalign — выравнивание",
+    "word_align": "SimAlign — выравнивание слов",
     "corpus": "Корпус соответствий",
 }
 STAGES = tuple(STAGE_NAMES)
@@ -34,6 +35,7 @@ def folder(root: Path, category: str) -> Path:
         "overlap_output": "data/overlaps/output",
         "embeddings": "data/embeddings",
         "aligned": "data/aligned",
+        "word_alignment": "data/word_alignment",
         "corpus": "data/corpus",
         "jobs": "data/ui_jobs",
         "imports": "data/imported",
