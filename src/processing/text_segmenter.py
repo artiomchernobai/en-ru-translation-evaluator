@@ -161,7 +161,7 @@ class SentenceSegmenter:
         nlp = self._get_nlp(language)
         base = self._spacy_starts(text, nlp)
         if language == "en":
-            from src.processing.boundary_candidate_detector import _spans
+            from src.processing.english_dialogue_boundaries import _spans
             spans = _spans(text)
             opening_quotes = {left for left, _ in spans}
             closing_quotes = {right for _, right in spans}
@@ -228,7 +228,7 @@ class SentenceSegmenter:
             # spaCy can treat punctuation in an inline title as a full stop:
             # She wrote 'Hello!' and smiled.  The quote parser knows this
             # is not a dialogue, so veto the corresponding spaCy boundary.
-            from english_dialogue_boundaries import _spoken_quote
+            from src.processing.english_dialogue_boundaries import _spoken_quote
             non_speech_closes = {
                 end for opening, end in spans if not _spoken_quote(text, opening)
             }

@@ -1,26 +1,13 @@
 """Vecalign's [source_indices]:[target_indices]:cost format and display rows."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
-
-ALIGNMENT = re.compile(r"^\s*\[([^\]]*)\]\s*:\s*\[([^\]]*)\]\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*$")
-
-
-def parse_ids(raw: str) -> list[int]:
-    return [int(x.strip()) for x in raw.split(",") if x.strip()]
+from src.processing.alignment import parse_alignment as _parse_alignment, parse_indices as parse_ids
 
 
 def parse_alignment(text: str) -> list[dict]:
-    result = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        if not line.strip():
-            continue
-        m = ALIGNMENT.fullmatch(line)
-        if not m:
-            raise ValueError(f"Некорректная строка файла .align: {number}: {line[:100]}")
-        result.append({"ru_ids": parse_ids(m[1]), "en_ids": parse_ids(m[2]), "cost": float(m[3])})
-    return result
+    return [{"ru_ids": row["source_indices"], "en_ids": row["target_indices"], "cost": row["cost"]}
+            for row in _parse_alignment(text)]
 
 
 def sentences(path: Path) -> list[str]:

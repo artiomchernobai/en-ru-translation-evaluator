@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 
+from src.processing.alignment import validate_alignment
 from src.ui.alignment_view import expand_alignment, parse_alignment, sentences
 from src.ui.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
 from src.ui.file_browser import (
@@ -33,7 +34,7 @@ st.set_page_config(page_title="Text Pipeline · Workbench", page_icon="📄", la
 # CSS is exclusively cosmetic. The bottom dock uses Streamlit's native st.bottom.
 st.markdown("""
 <style>
-.block-container {padding-top: 1.5rem; padding-bottom: 7rem; max-width: 1800px;}
+.block-container {padding-top: 1rem; padding-left: 2rem; padding-right: 2rem; padding-bottom: 2rem; max-width: none;}
 [data-testid="stSidebar"] {display: none;}
 h1 {font-size: 1.65rem !important;}
 h3 {font-size: 1.05rem !important;}
@@ -47,58 +48,45 @@ def relative(path: Path) -> str:
 
 
 def show_viewer(title: str, key: str, options: list[str], default_index: int = 0) -> None:
-    with st.container(border=True):
+    with st.container(border=True, key=f"viewer_{key}"):
         st.subheader(title)
-        chosen = st.selectbox(
-            "Файл", ["— Выберите файл —"] + options,
-            key=f"file_{key}", index=default_index,
-        )
-        if chosen.startswith("—"):
-            st.info("Выберите TXT, CSV, JSON или .align из каталога data/.")
-            st.text_area("Просмотр", value="", height=450, disabled=True, key=f"empty_{key}")
-            return
+        chosen = st.selectbox("Файл", ["— Выберите файл —"] + options,
+                              key=f"file_{key}", index=default_index)
         try:
-            path = safe_file(ROOT, chosen)
-            details = file_details(path)
-            content = details["content"]
-            st.caption(f"{details['lines']} строк · {details['chars']:,} символов · {details['bytes']:,} байт")
-            fmt = details["type"]
-            if fmt == ".csv":
-                fields, rows, truncated = parse_csv_preview(content)
-                if rows:
-                    st.dataframe(rows, width="stretch", height=485, hide_index=True)
+            path = None if chosen.startswith("—") else safe_file(ROOT, chosen)
+            details = file_details(path) if path else None
+            content = details["content"] if details else ""
+            st.caption(f"{details['lines']} строк · {details['chars']:,} символов · {details['bytes']:,} байт"
+                       if details else "Выберите файл из каталога data/.")
+            fmt = details["type"] if details else ".txt"
+            mode = st.radio("Режим", ["Структура", "Исходный текст"], horizontal=True,
+                            key=f"mode_{key}") if fmt == ".json" else None
+            with st.container(key=f"viewer_body_{key}", height=500, border=False):
+                if fmt == ".csv":
+                    _, rows, truncated = parse_csv_preview(content)
+                    if rows:
+                        st.dataframe(rows, width="stretch", height="stretch", hide_index=True)
+                    else:
+                        st.text_area("CSV", content[:200_000], height="stretch", disabled=True,
+                                     key=f"content_{key}", label_visibility="collapsed")
+                elif fmt == ".json" and mode == "Структура":
+                    st.json(parse_json(content), expanded=False)
                 else:
-                    st.text_area("CSV", content[:150_000], height=440, disabled=True)
-                if truncated:
-                    st.caption("Показаны первые 500 строк CSV. Скачивание содержит полный файл.")
-            elif fmt == ".json":
-                mode = st.radio("Режим", ["Структура", "Исходный текст"], horizontal=True, key=f"mode_{key}")
-                if mode == "Структура":
-                    with st.container(height=460, border=False):
-                        st.json(parse_json(content), expanded=False)
-                else:
-                    st.text_area("JSON", content[:200_000], height=460, disabled=True)
-            else:
-                visible = content[:200_000]
-                st.text_area(
-                    "Текст", visible, height=500, disabled=True,
-                    label_visibility="collapsed", key=f"txt_{key}_{path.name}_{path.stat().st_mtime_ns}",
-                )
-                if len(content) > len(visible):
-                    st.caption("Показаны первые 200 000 символов. Файл доступен целиком для скачивания.")
-            st.download_button(
-                "Скачать файл", data=path.read_bytes(),
-                file_name=path.name, mime="application/octet-stream",
-                key=f"download_{key}", use_container_width=True,
-            )
-        except (ValueError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    st.text_area("Текст", content[:200_000], height="stretch", disabled=True,
+                                 key=f"content_{key}_{chosen}_{path.stat().st_mtime_ns if path else 0}", label_visibility="collapsed")
+            if path:
+                st.download_button("Скачать файл", data=path.read_bytes(), file_name=path.name,
+                                   key=f"download_{key}", use_container_width=True)
+                if len(content) > 200_000 and fmt != ".csv" and mode != "Структура":
+                    st.caption("Показаны первые 200 000 символов. Скачивание содержит полный файл.")
+                if fmt == ".csv" and truncated:
+                    st.caption("Показаны первые 500 строк. Скачивание содержит полный файл.")
+        except (ValueError, OSError, UnicodeError) as exc:
             st.error(f"Не удалось открыть файл: {exc}")
 
 
 def render_files() -> None:
     files = [relative(path) for path in available_files(ROOT)]
-    if not files:
-        st.info("В каталоге data/ пока нет файлов TXT, CSV или JSON. Импортировать можно на вкладке «Настройки».")
     left, right = st.columns(2, gap="medium")
     with left:
         show_viewer("Окно A", "a", files)
@@ -118,7 +106,10 @@ def render_alignment() -> None:
         return
     try:
         mapping = parse_alignment(align_path.read_text(encoding="utf-8-sig"))
-        rows = expand_alignment(mapping, sentences(source_path), sentences(target_path))
+        source, target_lines = sentences(source_path), sentences(target_path)
+        validate_alignment([{"source_indices": row["ru_ids"], "target_indices": row["en_ids"],
+                             "cost": row["cost"]} for row in mapping], len(source), len(target_lines))
+        rows = expand_alignment(mapping, source, target_lines)
     except (ValueError, OSError) as exc:
         st.error(f"Ошибка разбора выравнивания: {exc}")
         return
@@ -181,7 +172,7 @@ def render_settings() -> None:
     st.divider()
     st.subheader("Подключённые компоненты")
     names = [
-        "text_normalizer", "postprocessor", "normalizer",
+        "src.processing.text_normalizer", "src.processing.postprocessor", "src.processing.normalizer",
         "src.processing.text_segmenter", "src.processing.boundary_aware_segmenter",
         "src.processing.text_json_txt_exporter", "src.processing.corpus_builder",
         "src.external_tools.vecalign_tools",
@@ -195,6 +186,7 @@ def render_settings() -> None:
     st.caption("Обнаружение модуля не гарантирует, что зависимости, модели и внешние исполняемые файлы установлены.")
 
 
+@st.fragment(run_every="1s")
 def render_controls() -> None:
     with st.container(border=True, key="right_actions"):
         st.subheader("Этапы обработки")
@@ -206,6 +198,9 @@ def render_controls() -> None:
         max_size = st.selectbox("Размер группы Vecalign", [2, 3, 4], index=0)
         current = st.session_state.get("ui_job")
         running = bool(current and current["process"].poll() is None)
+        if current and not running and not current.get("completion_rendered"):
+            current["completion_rendered"] = True
+            st.rerun(scope="app")
         if current:
             status = read_status(ROOT, current["id"])
             st.caption(f"Последняя задача: {current['stage']} · {status.get('state', 'unknown')}")
@@ -271,6 +266,59 @@ def render_console() -> None:
             live_console(last)
 
 
+def fit_viewers() -> None:
+    # Observe the actual dock and panel positions rather than assuming a screen size.
+    st.html(r"""
+    <style>
+    [class*="st-key-viewer_body_"] {height: var(--viewer-height, 50dvh) !important; min-height: 160px !important; max-height: var(--viewer-height, 50dvh) !important; flex: 0 0 var(--viewer-height, 50dvh) !important;}
+    div:has(> [class*="st-key-viewer_body_"]) {height: var(--viewer-height, 50dvh) !important; flex: 0 0 var(--viewer-height, 50dvh) !important;}
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] h1,
+    [data-testid="stAppViewContainer"] h3,
+    [data-testid="stAppViewContainer"] label {color: var(--reading-color);}
+    .st-key-right_actions {overflow-y: auto; max-height: var(--controls-height, none);}
+    [class*="st-key-viewer_body_"] textarea:disabled,
+    [data-testid="stBottom"] textarea:disabled {
+        color: var(--reading-color) !important;
+        -webkit-text-fill-color: var(--reading-color) !important;
+        opacity: 1 !important;
+    }
+    </style>
+    <script>
+    if (window.__fitViewersCleanup) window.__fitViewersCleanup();
+    let scheduled = false;
+    const fit = () => {
+      scheduled = false;
+      const app = document.querySelector('[data-testid="stApp"]');
+      if (!app) return;
+      const rgb = getComputedStyle(app).backgroundColor.match(/\d+/g);
+      const color = rgb && (Number(rgb[0])*.299 + Number(rgb[1])*.587 + Number(rgb[2])*.114) < 128 ? '#ffffff' : '#000000';
+      if (document.documentElement.style.getPropertyValue('--reading-color') !== color)
+        document.documentElement.style.setProperty('--reading-color', color);
+      const dock = document.querySelector('[data-testid="stBottom"]');
+      const bottom = Math.min(window.innerHeight, dock ? dock.getBoundingClientRect().top : window.innerHeight);
+      const controls = document.querySelector('.st-key-right_actions');
+      if (controls) {
+        const h = Math.max(200, bottom - controls.getBoundingClientRect().top - 16) + 'px';
+        if (controls.style.getPropertyValue('--controls-height') !== h) controls.style.setProperty('--controls-height',h);
+      }
+      document.querySelectorAll('[class*="st-key-viewer_body_"]').forEach(el => {
+        const h = Math.max(160, Math.floor(bottom - el.getBoundingClientRect().top - 82)) + 'px';
+        for (const box of [el, el.parentElement]) {
+          if (box.style.getPropertyValue('--viewer-height') !== h) box.style.setProperty('--viewer-height', h);
+        }
+      });
+    };
+    const schedule = () => { if (!scheduled) {scheduled = true; requestAnimationFrame(fit);} };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['style','class']});
+    window.addEventListener('resize', schedule);
+    window.__fitViewersCleanup = () => {observer.disconnect();window.removeEventListener('resize',schedule);};
+    schedule();
+    </script>
+    """, unsafe_allow_javascript=True)
+
+
 def main() -> None:
     header, version = st.columns([4, 1], vertical_alignment="center")
     with header:
@@ -293,6 +341,7 @@ def main() -> None:
     with sidebar:
         render_controls()
     render_console()
+    fit_viewers()
 
 
 if __name__ == "__main__":
