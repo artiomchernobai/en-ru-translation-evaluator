@@ -24,7 +24,7 @@ def _save_json(path: Path, obj: dict) -> None:
 
 
 def stage_clean(root: Path, docs: list[str], max_size: int) -> None:
-    from ..processing.text_normalizer import clean_text
+    from src.processing.preprocessing.cleaning import clean_text
     for doc in docs:
         src = check_file(folder(root, "raw") / f"{doc}.txt")
         target = folder(root, "cleaned") / f"{doc}.txt"
@@ -36,10 +36,10 @@ def stage_clean(root: Path, docs: list[str], max_size: int) -> None:
 
 def stage_segment(root: Path, docs: list[str], max_size: int) -> None:
     try:
-        from src.processing.text_segmenter import SentenceSegmenter
-        from src.processing.postprocessor import SentencePostprocessor
+        from src.processing.segmentation.segmenter import SentenceSegmenter
+        from src.processing.segmentation.postprocessor import SentencePostprocessor
     except ImportError as error:
-        raise RuntimeError("Для сегментации нужны src.processing.text_segmenter и postprocessor") from error
+        raise RuntimeError("Для сегментации нужны src.processing.segmentation.segmenter и postprocessor") from error
     segmenter = SentenceSegmenter()
     postprocessor = SentencePostprocessor()
     ru_processor = None
@@ -50,9 +50,9 @@ def stage_segment(root: Path, docs: list[str], max_size: int) -> None:
         if lang == "ru":
             if ru_processor is None:
                 try:
-                    from src.processing.ru_boundary_classifier import RuBoundaryClassifier
-                    from src.processing.boundary_aware_segmenter import BoundaryAwareSegmenter
-                    from src.processing.boundry_dataset_builder import BoundaryDatasetBuilder
+                    from src.processing.segmentation.ru_classifier import RuBoundaryClassifier
+                    from src.processing.segmentation.boundary_aware import BoundaryAwareSegmenter
+                    from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
                 except ImportError as error:
                     raise RuntimeError("Для русского нужны RuBERT, BoundaryAwareSegmenter и BoundaryDatasetBuilder") from error
                 model_dir = root / "models" / "ru_boundary_rubert_v4" / "best_model"
@@ -85,10 +85,10 @@ def stage_segment(root: Path, docs: list[str], max_size: int) -> None:
 
 def stage_normalize(root: Path, docs: list[str], max_size: int) -> None:
     try:
-        from src.processing.normalizer import TextNormalizer
-        from src.processing.text_json_txt_exporter import TextJsonTxtExporter
+        from src.processing.preprocessing.normalization import TextNormalizer
+        from src.processing.preprocessing.export import TextJsonTxtExporter
     except ImportError as error:
-        raise RuntimeError("Нужны normalizer.TextNormalizer и src.processing.text_json_txt_exporter") from error
+        raise RuntimeError("Нужны normalizer.TextNormalizer и src.processing.preprocessing.export") from error
     normalizer = TextNormalizer()
     exporter = TextJsonTxtExporter()
     for doc in docs:
@@ -158,7 +158,7 @@ def stage_align(root: Path, docs: list[str], max_size: int,
 
 
 def stage_word_align(root: Path, docs: list[str], max_size: int) -> None:
-    from src.processing.word_alignment_io import align_word_files, configured_word_aligner
+    from src.processing.alignment.io import align_word_files, configured_word_aligner
     if SOURCE not in docs or not any(doc in TARGETS for doc in docs):
         raise ValueError("Для выравнивания слов выберите оригинал и хотя бы один перевод")
     aligner = configured_word_aligner()
@@ -174,9 +174,9 @@ def stage_corpus(root: Path, docs: list[str], max_size: int) -> None:
     if SOURCE not in docs:
         raise ValueError("Для создания корпуса нужен original-rus")
     try:
-        from src.processing.corpus_builder import CorpusBuilder
+        from src.processing.alignment.corpus import CorpusBuilder
     except ImportError as error:
-        raise RuntimeError("Не найден src.processing.corpus_builder.CorpusBuilder") from error
+        raise RuntimeError("Не найден src.processing.alignment.corpus.CorpusBuilder") from error
     builder = CorpusBuilder()
     targets = [d for d in TARGETS if d in docs]
     if not targets:

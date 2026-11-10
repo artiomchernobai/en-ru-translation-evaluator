@@ -69,7 +69,7 @@ class ExternalToolsRunner:
 
     def generate_embeddings(self, input_path: Path, output_path: Path, language: str):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        self.run_command([self.laser_python, self._path(self.project_dir / 'src/processing/embedder.py'),
+        self.run_command([self.laser_python, '-m', 'src.processing.alignment.embeddings',
                           self._path(input_path), self._path(output_path), language])
 
     def align(self, source_path: Path, target_path: Path, source_overlap_path: Path,

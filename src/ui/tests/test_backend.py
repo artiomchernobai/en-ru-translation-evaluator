@@ -81,7 +81,7 @@ class PipelineTests(unittest.TestCase):
             import types
             fake = types.ModuleType("text_normalizer")
             fake.clean_text = lambda content: content + "!"
-            with patch.dict(sys.modules, {"src.processing.text_normalizer": fake}):
+            with patch.dict(sys.modules, {"src.processing.preprocessing.cleaning": fake}):
                 run_stage(root, "clean", ["original-rus"], 2)
             self.assertEqual((folder(root, "cleaned") / "original-rus.txt").read_text(), "Привет!")
 
@@ -98,8 +98,8 @@ class PipelineTests(unittest.TestCase):
             shutil.copytree(Path(__file__).resolve().parents[2] / "external_tools",
                             root / "src" / "external_tools",
                             ignore=shutil.ignore_patterns("__pycache__"))
-            (root / "src" / "processing").mkdir()
-            (root / "src" / "processing" / "text_normalizer.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
+            (root / "src" / "processing" / "preprocessing").mkdir(parents=True)
+            (root / "src" / "processing" / "preprocessing" / "cleaning.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
             raw = folder(root, "raw") / "original-rus.txt"
             raw.parent.mkdir(parents=True)
             raw.write_text("  Текст  ", encoding="utf-8")

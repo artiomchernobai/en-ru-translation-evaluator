@@ -1,4 +1,2 @@
-# Install a platform-appropriate PyTorch build first (CPU or CUDA).
-simalign==0.4
-# SimAlign 0.4 uses the transformers 4 API.
-transformers>=4.41,<5
+# Compatibility entry point; canonical requirements live with the alignment module.
+-r alignment/requirements.txt

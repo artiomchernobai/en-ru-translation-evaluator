@@ -1,0 +1,14 @@
+.review{display:flex;flex-direction:column;min-height:120px;color:var(--reading-color,var(--st-text-color));font:16px/1.65 var(--st-font,sans-serif)}
+.panes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;flex:1;min-height:0}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0;border:1px solid color-mix(in srgb,var(--st-text-color) 20%,transparent);border-radius:4px;overflow:hidden}
+.pane-header{font-size:12px;line-height:1.4;padding:4px 8px;border-bottom:1px solid color-mix(in srgb,var(--st-text-color) 15%,transparent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.text{padding:10px 12px;overflow:auto;flex:1;min-height:0;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;position:relative}
+.word{cursor:pointer;border-radius:3px;scroll-margin:32px}.word:hover{outline:1px solid currentColor}.word:focus-visible{outline:2px solid var(--st-primary-color)}
+.word.unlinked,.word.sentence_unaligned{background:color-mix(in srgb,#ea8b26 24%,transparent);text-decoration:underline dotted #ea8b26;text-underline-offset:3px}
+.word.not_processed{color:var(--reading-color,var(--st-text-color));text-decoration:underline dashed #9299a4}
+.word.selected,.swatch.selected{background:color-mix(in srgb,#f3ce60 42%,var(--st-background-color));color:var(--reading-color,var(--st-text-color));outline:1px solid #ad8321}
+.word.related,.swatch.related{background:color-mix(in srgb,#97d4ff 42%,var(--st-background-color));color:var(--reading-color,var(--st-text-color));outline:1px solid #357faa}
+.word.selected.unlinked,.word.selected.sentence_unaligned{background:color-mix(in srgb,#f0a153 42%,var(--st-background-color));color:var(--reading-color,var(--st-text-color));outline:2px solid #a55200}
+.word.current-block{box-shadow:inset 0 -2px color-mix(in srgb,#449bdc 45%,transparent)}
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;line-height:1.5;padding:4px 0}.swatch{padding:0 4px;border-radius:3px}.swatch.unlinked{background:color-mix(in srgb,#ea8b26 24%,transparent)}.swatch.unknown{border-bottom:1px dashed #9299a4}.selection{margin-left:auto}
+@media(max-width:650px){.panes{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.selection{margin-left:0}}

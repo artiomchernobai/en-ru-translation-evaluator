@@ -6,9 +6,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.processing.word_alignment import WordAligner, BlockTooLongError
-from src.processing.word_alignment_io import align_word_files
-from src.processing.simalign_backend import SimAlignBackend
+from src.processing.alignment.words import WordAligner, BlockTooLongError
+from src.processing.alignment.io import align_word_files
+from src.processing.alignment.simalign_backend import SimAlignBackend
 
 
 class Backend:
@@ -151,7 +151,7 @@ def test_stage_and_main_write_each_pair_and_reuse_backend(tmp_path, monkeypatch)
     import src.processing.main as processing_main
     backend = Backend()
     factory = Mock(return_value=WordAligner(backend))
-    monkeypatch.setattr('src.processing.word_alignment_io.configured_word_aligner', factory)
+    monkeypatch.setattr('src.processing.alignment.io.configured_word_aligner', factory)
     for name in (SOURCE, *TARGETS):
         path = folder(tmp_path, 'normalized') / f'{name}.json'
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,7 +205,7 @@ def test_interface_exposes_word_alignment_stage():
     process.poll.return_value = None
     from unittest.mock import patch
     with patch('src.ui.jobs.start_job', return_value={'id': 'words', 'stage': 'word_align', 'process': process}) as start:
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'src/ui/app.py')).run()
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'src/ui/app.py'), default_timeout=10).run()
         assert not app.exception
         app.button(key='stage_word_align').click().run()
         assert not app.exception
