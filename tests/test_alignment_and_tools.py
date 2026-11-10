@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.processing.alignment import parse_alignment, validate_alignment
-from src.processing.corpus_builder import CorpusBuilder
+from src.processing.alignment.sentences import parse_alignment, validate_alignment
+from src.processing.alignment.corpus import CorpusBuilder
 from src.ui.alignment_view import parse_alignment as ui_parse
 from src.external_tools.vecalign_tools import ExternalToolsRunner
 

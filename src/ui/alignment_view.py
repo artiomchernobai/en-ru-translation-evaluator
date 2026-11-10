@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from src.processing.alignment import parse_alignment as _parse_alignment, parse_indices as parse_ids
+from src.processing.alignment.sentences import parse_alignment as _parse_alignment, parse_indices as parse_ids
 
 
 def parse_alignment(text: str) -> list[dict]:

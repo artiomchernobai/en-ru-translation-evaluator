@@ -1,7 +1,7 @@
 
 import pytest
 
-from src.processing.text_segmenter import SentenceSegmenter
+from src.processing.segmentation.segmenter import SentenceSegmenter
 
 TEST_CASES = [
     {
@@ -128,7 +128,7 @@ def test_debug_dialogue_boundary(segmenter):
 
 import tempfile
 from pathlib import Path
-from src.processing.boundry_dataset_builder import BoundaryDatasetBuilder
+from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
 
 builder = BoundaryDatasetBuilder(context_size=120)
 

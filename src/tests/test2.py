@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from src.processing.boundry_dataset_builder import BoundaryDatasetBuilder
+from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
 
 builder = BoundaryDatasetBuilder(context_size=120)
 

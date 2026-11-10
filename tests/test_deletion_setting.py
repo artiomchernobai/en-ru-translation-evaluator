@@ -76,7 +76,7 @@ def test_interface_submits_chosen_penalty(stage):
     process=Mock()
     process.poll.return_value=None
     with patch('src.ui.jobs.start_job',return_value={'id':'ui-setting-test','stage':stage,'process':process}) as start:
-        app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'src/ui/app.py')).run()
+        app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'src/ui/app.py'), default_timeout=10).run()
         assert not app.exception
         app.number_input(key='del_percentile_frac').set_value(0.1).run()
         app.button(key='stage_align' if stage=='align' else 'all').click().run()

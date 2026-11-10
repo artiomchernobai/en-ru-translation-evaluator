@@ -9,15 +9,16 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.external_tools.vecalign_tools import ExternalToolsRunner
-from src.processing.text_json_txt_exporter import TextJsonTxtExporter
-from src.processing.corpus_builder import CorpusBuilder
-from src.processing.text_segmenter import SentenceSegmenter
-from src.processing.boundry_dataset_builder import *
+from src.processing.preprocessing.export import TextJsonTxtExporter
+from src.processing.alignment.corpus import CorpusBuilder
+from src.processing.segmentation.segmenter import SentenceSegmenter
+from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
 
-from src.processing.postprocessor import SentencePostprocessor
-from src.processing.normalizer import TextNormalizer
-from src.processing.text_normalizer import clean_text
-from src.processing.boundary_aware_segmenter import *
+from src.processing.segmentation.postprocessor import SentencePostprocessor
+from src.processing.preprocessing.normalization import TextNormalizer
+from src.processing.preprocessing.cleaning import clean_text
+from src.processing.segmentation.boundary_aware import BoundaryAwareSegmenter
+from src.processing.segmentation.ru_classifier import RuBoundaryClassifier
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -35,8 +36,6 @@ ALIGNED_DIR = BASE_DIR / "data" / "aligned"
 CORPUS_DIR = BASE_DIR / "data" / "corpus"
 WORD_ALIGNMENT_DIR = BASE_DIR / "data" / "word_alignment"
 
-LASER_DIR = Path("/home/artiom/tools/laser-env/bin/python")
-VECALIGN_DIR = Path("/home/artiom/tools/vecalign-env/bin/python")
 
 DOCUMENTS = {
     "original-rus": "ru",
@@ -175,7 +174,7 @@ def build_corpora(corpus_builder):
 
 
 def build_word_alignments():
-    from src.processing.word_alignment_io import align_word_files, configured_word_aligner
+    from src.processing.alignment.io import align_word_files, configured_word_aligner
     aligner = configured_word_aligner()
     source_document = "original-rus"
     for target_document in TARGET_DOCUMENTS:
