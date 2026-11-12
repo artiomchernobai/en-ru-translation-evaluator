@@ -160,9 +160,13 @@ def build_word_alignments():
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Text processing pipeline")
-    parser.add_argument('--stage', choices=('all', 'word_align'), default='all',
-                        help='Run all processing, or only word alignment on existing normalized files')
+    parser.add_argument('--stage', choices=('all', 'word_align', 'cometkiwi'), default='all',
+                        help='Run the full pipeline, word alignment, or COMETKiwi on existing normalized/aligned files')
     args = parser.parse_args(argv)
+    if args.stage == 'cometkiwi':
+        from src.processing.evaluation.stages import stage_cometkiwi
+        stage_cometkiwi(BASE_DIR, list(DOCUMENTS), 3)
+        return
     create_directories()
     if args.stage == 'word_align':
         build_word_alignments()
@@ -210,6 +214,9 @@ def main(argv=None):
 
     # 5. Align words in the sentence groups
     build_word_alignments()
+
+    from src.processing.evaluation.stages import stage_cometkiwi
+    stage_cometkiwi(BASE_DIR, list(DOCUMENTS), 3)
 
     # 6. Build parallel corpora
     build_corpora(corpus_builder)

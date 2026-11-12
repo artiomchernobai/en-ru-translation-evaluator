@@ -6,6 +6,8 @@ from src.processing.preprocessing.stages import stage_clean, stage_normalize
 from src.processing.segmentation.stages import stage_segment
 from src.processing.alignment.stages import stage_overlap, stage_embed, stage_align, stage_word_align, stage_corpus
 
+from src.processing.evaluation.stages import stage_cometkiwi
+
 FUNCTIONS = {
     "clean": stage_clean,
     "segment": stage_segment,
@@ -14,6 +16,7 @@ FUNCTIONS = {
     "embed": stage_embed,
     "align": stage_align,
     "word_align": stage_word_align,
+    "cometkiwi": stage_cometkiwi,
     "corpus": stage_corpus,
 }
 

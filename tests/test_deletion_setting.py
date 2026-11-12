@@ -32,7 +32,8 @@ def test_native_and_wsl_receive_selected_penalty(tmp_path, value):
 
 
 def test_full_pipeline_forwards_penalty_only_to_alignment(tmp_path):
-    stages=['clean','segment','normalize','overlap','embed','align','word_align','corpus']
+    from src.processing.pipeline.config import STAGES
+    stages = STAGES
     with patch.dict('src.processing.pipeline.runner.FUNCTIONS',{name:Mock() for name in stages}):
         from src.processing.pipeline.runner import FUNCTIONS
         run_stage(tmp_path,'all',['original-rus','glenny-translation-en'],3,0.05)

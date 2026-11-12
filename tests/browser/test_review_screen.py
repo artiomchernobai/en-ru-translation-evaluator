@@ -31,6 +31,17 @@ def application(tmp_path):
     output = tmp_path/'data/word_alignment/test.json'
     output.parent.mkdir(parents=True)
     output.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    from src.processing.evaluation.windows import build_windows
+    from src.processing.evaluation.engine import evaluate_windows
+    class QualityBackend:
+        metadata = {'name': 'browser-QE-test'}
+        def predict(self, pairs):
+            return [{'status': 'scored', 'score': .75} for _ in pairs]
+    quality = evaluate_windows(build_windows(src, tgt, [
+        {'source_indices': [i], 'target_indices': [i], 'cost': .2} for i in range(3)]), QualityBackend())
+    quality_output = tmp_path/'data/translation_quality/test.cometkiwi.json'
+    quality_output.parent.mkdir(parents=True)
+    quality_output.write_text(json.dumps(quality), encoding='utf-8')
     for document in (src, tgt):
         path = tmp_path/f"data/raw/{document['document']}.txt"
         path.parent.mkdir(exist_ok=True)
@@ -114,4 +125,18 @@ def test_click_links_themes_layout_and_safe_text(application):
             page.keyboard.press('Enter')
             playwright.expect(target.locator('[data-id="0"]')).to_contain_class('related')
             assert not dialogs and not errors
+            assert not page.get_by_test_id('stException').count()
+
+
+def test_quality_window_navigation_and_scope(application):
+    with playwright.sync_playwright() as p:
+        executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
+            page = browser.new_page(viewport={'width': 1600, 'height': 1000})
+            page.goto(application)
+            page.get_by_text('Оценка перевода', exact=True).click()
+            playwright.expect(page.get_by_text('Оценка всего окна · выше — лучше', exact=True)).to_be_visible()
+            playwright.expect(page.get_by_test_id('stMetricValue')).to_have_text('0.7500')
+            playwright.expect(page.get_by_text('Все записи Vecalign, использованные для оценки окна', exact=True)).to_be_visible()
+            playwright.expect(page.get_by_role('button', name='COMETKiwi — оценка перевода', exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
