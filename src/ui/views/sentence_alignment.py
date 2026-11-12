@@ -1,6 +1,6 @@
 from pathlib import Path
 import streamlit as st
-from src.ui.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
+from src.processing.pipeline.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
 import csv
 import io
 from src.ui.alignment_view import expand_alignment,parse_alignment,sentences

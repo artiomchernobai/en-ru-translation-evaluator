@@ -1,51 +1,12 @@
-"""Build unlabeled boundary candidates with the SHARED inference detector.
-
-Existing labeled datasets remain untouched. This version intentionally expands
-Russian detection to standalone internal dashes. No automatic labels are set.
-"""
+"""Training CSV build/validation; inference extraction belongs to segmentation."""
 from __future__ import annotations
-
 import csv
-import hashlib
-from pathlib import Path
 import re
-from src.processing.segmentation.candidates import BoundaryCandidateDetector
+from pathlib import Path
+from src.processing.segmentation.extraction import BoundaryCandidateExtractor
 
 
-class BoundaryDatasetBuilder:
-    FIELDS = (
-        "id", "source", "language", "position", "left_context",
-        "right_context", "rule", "source_sha256", "label",
-    )
-
-    def __init__(self, context_size: int = 200):
-        if not isinstance(context_size, int) or context_size < 1:
-            raise ValueError("context_size must be a positive integer")
-        self.context_size = context_size
-
-    @staticmethod
-    def _display_context(value: str) -> str:
-        return (value.replace("\r\n", "\n").replace("\r", "\n")
-                .replace("\u00a0", "⍽").replace("\u202f", "⍽")
-                .replace("\t", "⇥").replace("\n", "⏎"))
-
-    def extract(self, text: str, language: str, source: str) -> list[dict]:
-        detector = BoundaryCandidateDetector(language)
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        candidates = detector.detect(text)
-        result = []
-        for c in candidates:
-            result.append({
-                "id": len(result), "source": source,
-                "language": language, "position": c.position,
-                "left_context": self._display_context(text[max(0, c.position - self.context_size):c.position]),
-                "right_context": self._display_context(text[c.position:c.position + self.context_size]),
-                "rule": ";".join(c.rules),
-                "source_sha256": digest,
-                "label": "",  # manual labeling only
-            })
-        return result
-
+class BoundaryDatasetBuilder(BoundaryCandidateExtractor):
     @classmethod
     def validate_csv(cls, output_path, expected_rows=None, require_order=False) -> int:
         """Validates SHUFFLED labeled CSV, too. Strict order is opt-in."""

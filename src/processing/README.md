@@ -2,14 +2,22 @@
 
 ```text
 processing/
-  main.py                         CLI и запуск этапов для выбранных документов
+  main.py                         стабильная точка входа CLI
+  pipeline/
+    cli.py                        прежний сценарий CLI
+    config.py                     пути, документы и названия этапов
+    runner.py                     диспетчер этапов для UI и фонового процесса
+    io.py                         общие файловые операции
   preprocessing/
+    stages.py                     запуск очистки и нормализации
     cleaning.py                   очистка исходного текста
     normalization.py              нормализация предложений
     export.py                     экспорт JSON → TXT для Vecalign
   segmentation/
     segmenter.py                  границы предложений, spaCy
-    candidates.py                 кандидаты границ
+    candidates.py                 обнаружение кандидатов границ
+    extraction.py                 контексты и записи кандидатов для обоих языков
+    stages.py                     запуск этапа сегментации
     english_dialogue.py           английские кавычки и слова автора
     ru_classifier.py              RuBERT и ограничения границ
     boundary_aware.py             объединение правил, модели и сегментатора
@@ -18,6 +26,7 @@ processing/
     boundary_dataset_builder.py   подготовка и проверка датасета границ
     data/training/                исходный учебный CSV
   alignment/
+    stages.py                     запуск LASER, Vecalign, SimAlign и корпуса
     sentences.py                  единый парсер и проверки .align
     embeddings.py                 LASER (отдельное окружение)
     words.py                      независимое ядро словесного выравнивания
@@ -58,3 +67,17 @@ from src.processing.alignment.io import align_word_files
 из корня проекта, как напрямую, так и через WSL. Символьные индексы и формат
 словесного JSON не менялись; ранее созданные результаты можно открывать без
 повторного выравнивания.
+
+`BoundaryCandidateExtractor` отвечает за обнаружение границ и контексты;
+`BoundaryDatasetBuilder` наследует его и добавляет только чтение/запись учебного CSV.
+Рабочая сегментация не зависит от модуля подготовки датасета.
+
+UI импортирует конфигурацию и диспетчер из `src.processing.pipeline`; обратных
+зависимостей от UI нет. Прежние `src/ui/config.py` и `src/ui/pipeline.py` удалены,
+перенаправляющих копий классов нет. Сценарии CLI и UI сохраняют свои прежние
+параметры и порядок операций; этот перенос не меняет алгоритмы сегментации.
+
+Исторические исходники и старые самостоятельные проверки находятся в
+`src/legacy` и не участвуют в импортах, запуске приложения или сборе pytest.
+Актуальные проверки: `python -m pytest`; браузерная проверка включается
+через `RUN_BROWSER_TESTS=1`.

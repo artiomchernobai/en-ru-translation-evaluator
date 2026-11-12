@@ -146,9 +146,9 @@ def test_file_adapter_arbitrary_names_atomic_failure_and_repeatability(tmp_path)
 
 
 def test_stage_and_main_write_each_pair_and_reuse_backend(tmp_path, monkeypatch):
-    from src.ui.config import SOURCE, TARGETS, folder
-    from src.ui.pipeline import run_stage
-    import src.processing.main as processing_main
+    from src.processing.pipeline.config import SOURCE, TARGETS, folder
+    from src.processing.pipeline.runner import run_stage
+    import src.processing.pipeline.cli as processing_main
     backend = Backend()
     factory = Mock(return_value=WordAligner(backend))
     monkeypatch.setattr('src.processing.alignment.io.configured_word_aligner', factory)

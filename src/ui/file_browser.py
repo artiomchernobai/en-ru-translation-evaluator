@@ -89,7 +89,7 @@ def store_import(root: Path, filename: str, content: bytes) -> Path:
 
 def assign_to_raw(root: Path, imported: Path, document: str) -> Path:
     """Explicit action, TXT only, no implicit replacement of source texts."""
-    from .config import DOCUMENTS, folder
+    from src.processing.pipeline.config import DOCUMENTS, folder
     if document not in DOCUMENTS:
         raise ValueError("Неизвестный идентификатор документа")
     src = safe_file(root, str(imported.relative_to(root)))

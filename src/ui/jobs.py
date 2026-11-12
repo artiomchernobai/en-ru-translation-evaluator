@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .config import DOCUMENTS, STAGES, folder
+from src.processing.pipeline.config import DOCUMENTS, STAGES, folder
 from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE, validate_deletion_percentile
 
 

@@ -7,10 +7,10 @@ import time
 import traceback
 from pathlib import Path
 
-from .config import folder
+from src.processing.pipeline.config import folder
 from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE
 from .jobs import write_json
-from .pipeline import run_stage
+from src.processing.pipeline.runner import run_stage
 
 
 def run_job(request_file: Path) -> int:

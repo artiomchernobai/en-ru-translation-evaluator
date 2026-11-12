@@ -1,21 +1,21 @@
-"""Glue between BoundaryDatasetBuilder, RuBERT, spaCy and the postprocessor."""
+"""Glue between BoundaryCandidateExtractor, RuBERT, spaCy and the postprocessor."""
 from __future__ import annotations
 
 import csv
 from pathlib import Path
 
-from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
+from src.processing.segmentation.extraction import BoundaryCandidateExtractor
 from src.processing.segmentation.segmenter import SentenceSegmenter
 from src.processing.segmentation.ru_classifier import RuBoundaryClassifier, BoundaryVerdict
 
 
 class BoundaryAwareSegmenter:
     def __init__(self, ru_classifier: RuBoundaryClassifier, *,
-                 builder: BoundaryDatasetBuilder | None = None,
+                 builder: BoundaryCandidateExtractor | None = None,
                  segmenter: SentenceSegmenter | None = None,
                  postprocessor=None):
         self.ru_classifier = ru_classifier
-        self.builder = builder or BoundaryDatasetBuilder(context_size=ru_classifier.context_size)
+        self.builder = builder or BoundaryCandidateExtractor(context_size=ru_classifier.context_size)
         self.segmenter = segmenter or SentenceSegmenter()
         if postprocessor is None:
             from src.processing.segmentation.postprocessor import SentencePostprocessor
@@ -45,7 +45,7 @@ class BoundaryAwareSegmenter:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         verdicts = {v.position: v for v in predictions}
-        fields = list(BoundaryDatasetBuilder.FIELDS) + [
+        fields = list(BoundaryCandidateExtractor.FIELDS) + [
             "prediction", "decision", "prob_split", "origin"
         ]
         with path.open("w", encoding="utf-8-sig", newline="") as stream:
