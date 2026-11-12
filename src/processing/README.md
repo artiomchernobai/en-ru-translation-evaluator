@@ -22,6 +22,13 @@ processing/
     ru_classifier.py              RuBERT и ограничения границ
     boundary_aware.py             объединение правил, модели и сегментатора
     postprocessor.py              восстановление пунктуации
+  evaluation/
+    windows.py                    окна из соседних групп Vecalign
+    cometkiwi.py                   адаптер предзагруженной модели
+    engine.py                     оценка подготовленных окон
+    io.py                         JSON и CLI для произвольных пар
+    stages.py                     этап COMETKiwi для main и UI
+    README.md                     установка, запуск и формат результата
   datasets/
     boundary_dataset_builder.py   подготовка и проверка датасета границ
     data/training/                исходный учебный CSV
@@ -81,3 +88,7 @@ UI импортирует конфигурацию и диспетчер из `s
 `src/legacy` и не участвуют в импортах, запуске приложения или сборе pytest.
 Актуальные проверки: `python -m pytest`; браузерная проверка включается
 через `RUN_BROWSER_TESTS=1`.
+
+Оценка перевода COMETKiwi: [инструкции](evaluation/README.md). Этап `cometkiwi`
+доступен отдельно и включён в полный пайплайн; необходимы дополнительные зависимости
+и checkpoint модели.

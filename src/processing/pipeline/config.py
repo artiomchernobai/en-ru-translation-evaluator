@@ -19,6 +19,7 @@ STAGE_NAMES = {
     "embed": "LASER — эмбеддинги",
     "align": "Vecalign — выравнивание",
     "word_align": "SimAlign — выравнивание слов",
+    "cometkiwi": "COMETKiwi — оценка перевода",
     "corpus": "Корпус соответствий",
 }
 STAGES = tuple(STAGE_NAMES)
@@ -36,6 +37,7 @@ def folder(root: Path, category: str) -> Path:
         "embeddings": "data/embeddings",
         "aligned": "data/aligned",
         "word_alignment": "data/word_alignment",
+        "translation_quality": "data/translation_quality",
         "corpus": "data/corpus",
         "jobs": "data/ui_jobs",
         "imports": "data/imported",
