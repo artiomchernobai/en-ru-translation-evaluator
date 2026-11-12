@@ -1,6 +1,6 @@
 from pathlib import Path
 import streamlit as st
-from src.ui.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
+from src.processing.pipeline.config import DOCUMENTS, SOURCE, STAGE_NAMES, TARGETS, folder
 from src.ui.jobs import cancel_job,read_status,tail_log
 from src.ui import jobs as job_manager
 from src.external_tools.vecalign_tools import DEFAULT_DELETION_PERCENTILE

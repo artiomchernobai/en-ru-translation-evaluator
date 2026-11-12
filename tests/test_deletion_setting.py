@@ -9,7 +9,7 @@ from unittest.mock import patch, Mock
 import pytest
 from src.external_tools.vecalign_tools import ExternalToolsRunner, validate_deletion_percentile
 from src.ui.jobs import start_job, read_status, tail_log
-from src.ui.pipeline import run_stage
+from src.processing.pipeline.runner import run_stage
 
 
 @pytest.mark.parametrize('value', [-.1, 1.1, float('nan'), float('inf'), True])
@@ -33,8 +33,8 @@ def test_native_and_wsl_receive_selected_penalty(tmp_path, value):
 
 def test_full_pipeline_forwards_penalty_only_to_alignment(tmp_path):
     stages=['clean','segment','normalize','overlap','embed','align','word_align','corpus']
-    with patch.dict('src.ui.pipeline.FUNCTIONS',{name:Mock() for name in stages}):
-        from src.ui.pipeline import FUNCTIONS
+    with patch.dict('src.processing.pipeline.runner.FUNCTIONS',{name:Mock() for name in stages}):
+        from src.processing.pipeline.runner import FUNCTIONS
         run_stage(tmp_path,'all',['original-rus','glenny-translation-en'],3,0.05)
         FUNCTIONS['align'].assert_called_once_with(tmp_path,['original-rus','glenny-translation-en'],3,del_percentile_frac=0.05)
         FUNCTIONS['clean'].assert_called_once_with(tmp_path,['original-rus','glenny-translation-en'],3)

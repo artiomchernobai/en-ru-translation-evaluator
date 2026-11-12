@@ -1,6 +1,6 @@
 """Local, batched HuggingFace inference for the fine-tuned Russian dash model.
 
-Input is exactly BoundaryDatasetBuilder.extract(...) output for the *same* text.
+Input is exactly BoundaryCandidateExtractor.extract(...) output for the *same* text.
 Trainer convention: 0 = KEEP; 1 = SPLIT. Inference uses left/right text pairs
 and keeps the original absolute offsets; the model does not edit the text.
 """

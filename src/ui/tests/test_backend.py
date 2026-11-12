@@ -11,11 +11,11 @@ import unittest
 from unittest.mock import patch
 
 from src.ui.alignment_view import expand_alignment, parse_alignment
-from src.ui.config import folder
+from src.processing.pipeline.config import folder
 from src.ui.file_browser import (
     assign_to_raw, available_files, parse_csv_preview, safe_file, store_import,
 )
-from src.ui.pipeline import run_stage
+from src.processing.pipeline.runner import run_stage
 
 
 class BrowserTests(unittest.TestCase):
@@ -98,8 +98,9 @@ class PipelineTests(unittest.TestCase):
             shutil.copytree(Path(__file__).resolve().parents[2] / "external_tools",
                             root / "src" / "external_tools",
                             ignore=shutil.ignore_patterns("__pycache__"))
-            (root / "src" / "processing" / "preprocessing").mkdir(parents=True)
-            (root / "src" / "processing" / "preprocessing" / "cleaning.py").write_text("def clean_text(text):\n    return text.strip()\n", encoding="utf-8")
+            shutil.copytree(Path(__file__).resolve().parents[2] / "processing",
+                            root / "src" / "processing",
+                            ignore=shutil.ignore_patterns("__pycache__", "data"))
             raw = folder(root, "raw") / "original-rus.txt"
             raw.parent.mkdir(parents=True)
             raw.write_text("  Текст  ", encoding="utf-8")

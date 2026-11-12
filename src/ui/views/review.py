@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 import streamlit as st
-from src.ui.config import folder
+from src.processing.pipeline.config import folder
 from src.ui.file_browser import safe_file
 from src.ui.review_model import review_payload, validate_review
 from src.ui.components.word_review import show_word_review

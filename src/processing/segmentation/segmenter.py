@@ -186,8 +186,8 @@ class SentenceSegmenter:
             base.difference_update(nested_veto)
 
         if candidates is None:
-            from src.processing.datasets.boundary_dataset_builder import BoundaryDatasetBuilder
-            candidates = BoundaryDatasetBuilder().extract(text, language, "inline")
+            from src.processing.segmentation.extraction import BoundaryCandidateExtractor
+            candidates = BoundaryCandidateExtractor().extract(text, language, "inline")
         if verdicts is None:
             verdicts = {}
         mandatory: set[int] = set()
