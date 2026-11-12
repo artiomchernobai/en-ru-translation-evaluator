@@ -22,6 +22,8 @@ def render_quality(root: Path):
             settings = {}
         with st.form('cometkiwi_settings'):
             model = st.text_input('Имя модели Hugging Face или путь к checkpoint', value=settings.get('model', DEFAULT_MODEL))
+            python = st.text_input('Python отдельного окружения COMETKiwi', value=settings.get('python', ''),
+                                   help=r'Например D:\piton\.venv-comet12\Scripts\python.exe. COMET устанавливается отдельно от Streamlit.')
             batch = st.number_input('Размер батча', min_value=1, max_value=128, value=int(settings.get('batch_size', 8)))
             gpu = st.checkbox('Использовать GPU', value=bool(settings.get('gpus', 0)))
             st.caption('Модель загружается один раз на задачу и используется для всех выбранных переводов. '
@@ -32,7 +34,7 @@ def render_quality(root: Path):
                     st.error('Укажите модель или checkpoint')
                 else:
                     settings_path.parent.mkdir(parents=True, exist_ok=True)
-                    settings_path.write_text(json.dumps({'model': model.strip(), 'batch_size': int(batch), 'gpus': int(gpu)}, indent=2), encoding='utf-8')
+                    settings_path.write_text(json.dumps({'model': model.strip(), 'batch_size': int(batch), 'gpus': int(gpu), 'python': python.strip()}, indent=2), encoding='utf-8')
                     st.success('Параметры сохранены для следующей задачи')
     current = st.session_state.get('ui_job')
     running = bool(current and current['process'].poll() is None)

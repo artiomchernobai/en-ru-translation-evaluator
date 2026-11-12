@@ -8,14 +8,14 @@ import tempfile
 from datetime import datetime, timezone
 
 from src.processing.alignment.sentences import parse_alignment
+from .settings import read_settings
 from .windows import build_windows
 from .engine import evaluate_windows
 from .cometkiwi import CometKiwiBackend, DEFAULT_MODEL
 
 
 def configured_backend(root):
-    path = Path(root) / 'data/cometkiwi_settings.json'
-    settings = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    settings = read_settings(root)
     return CometKiwiBackend.load(settings.get('model', os.environ.get('COMETKIWI_MODEL', DEFAULT_MODEL)),
                                 batch_size=settings.get('batch_size', 8), gpus=settings.get('gpus', 0))
 

@@ -13,7 +13,30 @@
 
 ## Установка и модель
 
-В окружении, которым запускается приложение:
+COMETKiwi и Streamlit 1.67 требуют несовместимые версии protobuf. Установите
+COMET в отдельное окружение **Python 3.12**, не добавляя туда Streamlit:
+
+```powershell
+py -3.12 -m venv .venv-comet12
+.\.venv-comet12\Scripts\python.exe -m pip install --upgrade pip
+.\.venv-comet12\Scripts\python.exe -m pip install -r src/processing/evaluation/requirements.txt
+.\.venv-comet12\Scripts\python.exe -m pip check
+```
+
+Интерфейс продолжайте запускать из прежнего окружения приложения. На странице
+«Оценка перевода» → «Модель и параметры запуска» задайте путь к Python COMET:
+`D:\piton\.venv-comet12\Scripts\python.exe`, сохраните настройки.
+Этап запускает отдельный процесс в этом окружении; журнал и JSON остаются общими.
+Все выбранные переводы обрабатываются одной загрузкой модели.
+
+Вместо поля UI можно перед запуском приложения задать переменную PowerShell:
+
+```powershell
+$env:COMETKIWI_PYTHON = "D:\piton\.venv-comet12\Scripts\python.exe"
+```
+
+Без отдельного интерпретатора используется текущий Python. В совместимом
+окружении без Streamlit достаточно:
 
 ```powershell
 python -m pip install -r src/processing/evaluation/requirements.txt
@@ -27,7 +50,7 @@ python -m pip install -r src/processing/evaluation/requirements.txt
 Токены не записываются в JSON результатов или настройки приложения.
 
 На странице «Оценка перевода» можно сохранить имя модели либо путь к уже
-скачанному COMETKiwi `.ckpt`, размер батча и выбор GPU. Настройки находятся в
+скачанному COMETKiwi `.ckpt`, размер батча выбор GPU и путь к Python отдельного окружения. Настройки находятся в
 `data/cometkiwi_settings.json`; они применяются к следующему запуску UI и main.
 Если настройки отсутствуют, модель можно задать переменной `COMETKIWI_MODEL`.
 Нужна именно модель QE/COMETKiwi, работающая без эталонного `ref`.
@@ -48,7 +71,7 @@ python src/processing/main.py --stage cometkiwi
 Произвольные имена файлов, без реестра документов приложения:
 
 ```powershell
-python -m src.processing.evaluation.io --source data/normalized/book-ru.json --target data/normalized/book-en.json --alignment data/aligned/book.align --output data/translation_quality/book.cometkiwi.json --model Unbabel/wmt22-cometkiwi-da --batch-size 8 --gpus 0 --radius 1
+.\.venv-comet12\Scripts\python.exe -m src.processing.evaluation.io --source data/normalized/book-ru.json --target data/normalized/book-en.json --alignment data/aligned/book.align --output data/translation_quality/book.cometkiwi.json --model Unbabel/wmt22-cometkiwi-da --batch-size 8 --gpus 0 --radius 1
 ```
 
 Для внедрения уже загруженной модели:

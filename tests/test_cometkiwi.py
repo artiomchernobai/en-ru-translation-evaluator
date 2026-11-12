@@ -166,3 +166,72 @@ def test_backend_failure_preserves_existing_output(tmp_path):
     with pytest.raises(RuntimeError, match='model failed'):
         evaluate_files(source, target, alignment, output, backend=backend)
     assert output.read_text() == 'previous successful result'
+
+
+def test_separate_interpreter_dispatch_and_paths(tmp_path, monkeypatch):
+    from src.processing.evaluation import stages
+    from src.processing.pipeline.config import SOURCE, TARGETS
+    import sys
+    import subprocess
+    pairs = [('source', 'target', 'align', 'output')]
+    monkeypatch.setattr(stages, 'selected_pairs', Mock(return_value=pairs))
+    monkeypatch.setattr(stages, 'read_settings', lambda root: {'python': sys.executable})
+    load, run = Mock(), Mock()
+    monkeypatch.setattr(stages, 'configured_backend', load)
+    monkeypatch.setattr(stages.subprocess, 'run', run)
+    stages.stage_cometkiwi(tmp_path, [SOURCE, *TARGETS], 3)
+    load.assert_not_called()
+    command = run.call_args.args[0]
+    assert command[0] == str(__import__('pathlib').Path(sys.executable).absolute())
+    assert command[3] == 'src.processing.evaluation.worker'
+    assert command[-3:] == [SOURCE, *TARGETS]
+    assert run.call_args.kwargs['check'] is True
+    run.side_effect = subprocess.CalledProcessError(1, command)
+    with pytest.raises(subprocess.CalledProcessError):
+        stages.stage_cometkiwi(tmp_path, [SOURCE, *TARGETS], 3)
+
+
+def test_isolated_worker_does_not_dispatch_again(tmp_path, monkeypatch):
+    from src.processing.evaluation import worker
+    from src.processing.pipeline.config import SOURCE, TARGETS
+    pairs = [('s', 't', 'a', 'o')]
+    monkeypatch.setattr(worker, 'selected_pairs', Mock(return_value=pairs))
+    evaluate = Mock()
+    monkeypatch.setattr(worker, 'evaluate_pairs', evaluate)
+    worker.main(['--root', str(tmp_path), '--documents', SOURCE, TARGETS[0]])
+    evaluate.assert_called_once_with(tmp_path, pairs)
+
+
+def test_real_isolated_process_without_ui_dependencies(tmp_path, monkeypatch):
+    from src.processing.evaluation.stages import stage_cometkiwi
+    from src.processing.pipeline.config import SOURCE, TARGETS, folder
+    import sys
+    fake = tmp_path / 'fake packages'
+    fake.mkdir()
+    (fake / 'comet.py').write_text('''
+import sys
+from types import SimpleNamespace
+assert 'streamlit' not in sys.modules
+class Model:
+    encoder = SimpleNamespace(tokenizer=SimpleNamespace(model_max_length=512, encode=lambda text, **kw: text.split()), max_positions=512)
+    def eval(self): pass
+    def requires_references(self): return False
+    def predict(self, samples, **kwargs):
+        return SimpleNamespace(scores=[.85 for _ in samples])
+def download_model(name): return 'fake.ckpt'
+def load_from_checkpoint(path): return Model()
+''')
+    monkeypatch.setenv('PYTHONPATH', str(fake))
+    monkeypatch.setenv('COMETKIWI_PYTHON', sys.executable)
+    for name in (SOURCE, *TARGETS):
+        path = folder(tmp_path, 'normalized') / f'{name}.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(document(name, 1)))
+    for target in TARGETS:
+        path = folder(tmp_path, 'aligned') / f'{SOURCE}_{target}.align'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('[0]:[0]:0.120000')
+    stage_cometkiwi(tmp_path, [SOURCE, *TARGETS], 3)
+    for target in TARGETS:
+        result = json.loads((folder(tmp_path, 'translation_quality') / f'{SOURCE}_{target}.cometkiwi.json').read_text())
+        assert result['windows'][0]['verdict']['score'] == .85
