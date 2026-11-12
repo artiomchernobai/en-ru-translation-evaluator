@@ -212,6 +212,7 @@ def test_real_isolated_process_without_ui_dependencies(tmp_path, monkeypatch):
 import sys
 from types import SimpleNamespace
 assert 'streamlit' not in sys.modules
+assert sys.stdout.encoding.lower().replace('-', '') == 'utf8'
 class Model:
     encoder = SimpleNamespace(tokenizer=SimpleNamespace(model_max_length=512, encode=lambda text, **kw: text.split()), max_positions=512)
     def eval(self): pass
@@ -223,6 +224,7 @@ def load_from_checkpoint(path): return Model()
 ''')
     monkeypatch.setenv('PYTHONPATH', str(fake))
     monkeypatch.setenv('COMETKIWI_PYTHON', sys.executable)
+    monkeypatch.setenv('PYTHONIOENCODING', 'cp1251')
     for name in (SOURCE, *TARGETS):
         path = folder(tmp_path, 'normalized') / f'{name}.json'
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,3 +237,13 @@ def load_from_checkpoint(path): return Model()
     for target in TARGETS:
         result = json.loads((folder(tmp_path, 'translation_quality') / f'{SOURCE}_{target}.cometkiwi.json').read_text())
         assert result['windows'][0]['verdict']['score'] == .85
+
+
+def test_ui_worker_forces_utf8_log_output(tmp_path, monkeypatch):
+    from src.ui.jobs import start_job
+    from src.ui import jobs
+    monkeypatch.setenv('PYTHONIOENCODING', 'cp1251')
+    spawn = Mock()
+    monkeypatch.setattr(jobs.subprocess, 'Popen', spawn)
+    start_job(tmp_path, 'cometkiwi', ['original-rus', 'glenny-translation-en'], 3)
+    assert spawn.call_args.kwargs['env']['PYTHONIOENCODING'] == 'utf-8'

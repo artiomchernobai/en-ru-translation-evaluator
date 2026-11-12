@@ -52,6 +52,7 @@ def start_job(root: Path, stage: str, document_names: list[str], max_size: int,
     write_json(status_path, {"state": "queued", "stage": stage, "started": time.time()})
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONPATH"] = str(root.resolve()) + os.pathsep + env.get("PYTHONPATH", "")
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(

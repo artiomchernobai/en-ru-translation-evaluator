@@ -34,6 +34,7 @@ def stage_cometkiwi(root: Path, docs: list[str], max_size: int) -> None:
             raise FileNotFoundError(f'Python окружения COMETKiwi не найден: {python}')
         code_root = Path(__file__).resolve().parents[3]
         env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
         env['PYTHONPATH'] = str(code_root) + os.pathsep + env.get('PYTHONPATH', '')
         command = [str(python.absolute()), '-u', '-m', 'src.processing.evaluation.worker',
                    '--root', str(root.resolve()), '--documents', SOURCE, *targets]
