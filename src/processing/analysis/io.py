@@ -12,18 +12,21 @@ from .candidates import collect_candidates
 def load_settings(root):
     path = Path(root) / 'data/candidate_settings.json'
     settings = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-    if not isinstance(settings, dict) or any(k not in ('low_quantile', 'high_quantile', 'glossary') for k in settings):
+    if not isinstance(settings, dict) or any(k not in ('low_quantile', 'high_quantile', 'glossary', 'window_strategy') for k in settings):
         raise ValueError('Unsupported candidate settings')
     return settings
 
 
-def collect_files(word_path, comet_path, output_path, **settings):
+def collect_files(word_path, comet_path, output_path, *, window_strategy=None, **settings):
     paths = {'word_alignment': Path(word_path), 'cometkiwi': Path(comet_path)}
     output_path = Path(output_path)
     if output_path.resolve() in [p.resolve() for p in paths.values()]:
         raise ValueError('Output must not overwrite inputs')
     payloads = {key: path.read_bytes() for key, path in paths.items()}
     words, comet = [json.loads(payloads[k].decode('utf-8-sig')) for k in paths]
+    actual = comet.get('window_config', {}).get('strategy', 'fixed')
+    if window_strategy is not None and actual != window_strategy:
+        raise ValueError('Candidate strategy must match the evaluated COMET window strategy')
     result = collect_candidates(words, comet, **settings)
     result['created_at'] = datetime.now(timezone.utc).isoformat()
     result['inputs'] = {k: {'path': str(paths[k]), 'sha256': hashlib.sha256(data).hexdigest()} for k, data in payloads.items()}
