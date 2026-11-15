@@ -39,6 +39,12 @@ def application(tmp_path):
             return [{'status': 'scored', 'score': .75} for _ in pairs]
     quality = evaluate_windows(build_windows(src, tgt, [
         {'source_indices': [i], 'target_indices': [i], 'cost': .2} for i in range(3)]), QualityBackend())
+    quality.update(source_document=src['document'], target_document=tgt['document'], radius=1)
+    from src.processing.analysis.candidates import collect_candidates
+    candidates = collect_candidates(data, quality)
+    candidate_output = tmp_path/'data/review_candidates/test.candidates.json'
+    candidate_output.parent.mkdir(parents=True)
+    candidate_output.write_text(json.dumps(candidates), encoding='utf-8')
     quality_output = tmp_path/'data/translation_quality/test.cometkiwi.json'
     quality_output.parent.mkdir(parents=True)
     quality_output.write_text(json.dumps(quality), encoding='utf-8')
@@ -140,3 +146,20 @@ def test_quality_window_navigation_and_scope(application):
             playwright.expect(page.get_by_text('Все записи Vecalign, использованные для оценки окна', exact=True)).to_be_visible()
             playwright.expect(page.get_by_role('button', name='COMETKiwi — оценка перевода', exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
+
+
+def test_candidate_evidence_highlighting_and_safe_text(application):
+    with playwright.sync_playwright() as p:
+        executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
+            page = browser.new_page(viewport={'width': 1600, 'height': 1000})
+            dialogs = []
+            page.on('dialog', lambda d: (dialogs.append(d.message), d.dismiss()))
+            page.goto(application)
+            page.get_by_text('Кандидаты', exact=True).click()
+            playwright.expect(page.get_by_role('heading', name='Кандидаты на проверку', exact=True)).to_be_visible()
+            playwright.expect(page.locator('mark').first).to_be_visible()
+            playwright.expect(page.get_by_text('Записи Vecalign и контекст окна', exact=True)).to_be_visible()
+            playwright.expect(page.get_by_role('button', name='Кандидаты на проверку', exact=True)).to_have_count(1)
+            assert not page.get_by_test_id('stException').count()
+            assert not dialogs

@@ -8,6 +8,8 @@ from src.processing.alignment.stages import stage_overlap, stage_embed, stage_al
 
 from src.processing.evaluation.stages import stage_cometkiwi
 
+from src.processing.analysis.stages import stage_candidates
+
 FUNCTIONS = {
     "clean": stage_clean,
     "segment": stage_segment,
@@ -17,6 +19,7 @@ FUNCTIONS = {
     "align": stage_align,
     "word_align": stage_word_align,
     "cometkiwi": stage_cometkiwi,
+    "candidates": stage_candidates,
     "corpus": stage_corpus,
 }
 
