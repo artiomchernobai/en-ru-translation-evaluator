@@ -225,3 +225,47 @@ def test_equivalent_centuries_do_not_trigger_number_signal(ru,en):
     w,c=pair([ru],[en])
     result=collect_candidates(w,c)
     assert not any(s['code']=='quantity_mismatch' for item in result['candidates'] for s in item['signals'])
+
+
+def test_full_candidate_payload_highlights_context_and_all_errors():
+    from src.ui.candidate_model import candidate_payload
+    words,comet=pair()
+    report=collect_candidates(words,comet)
+    current=next(c for c in report['candidates'] if c['group_index']==0)
+    payload=candidate_payload(report,current,report['candidates'],current['signals'],mode='Весь текст',identity='test')
+    assert len(payload['panes']['source']['sentences'])==4
+    source=payload['panes']['source']['sentences']
+    assert source[0]['focus'] and source[0]['context']
+    assert source[1]['context']
+    assert not source[2]['context']
+    assert any(p['active'] for p in source[0]['pieces'])
+    assert any(p['suspect'] and not p['active'] for p in source[2]['pieces'])
+    assert not any(p['active'] for p in source[2]['pieces'])
+    fragment=candidate_payload(report,current,report['candidates'],current['signals'],mode='Фрагмент',identity='test')
+    assert len(fragment['panes']['source']['sentences'])==2
+    for row in source:
+        assert ''.join(p['text'] for p in row['pieces'])==words['source']['sentences'][row['index']]['normalized_text']
+
+
+def test_full_candidate_clicks_choose_eligible_nearest_candidate():
+    from src.ui.candidate_model import candidate_payload
+    words,comet=pair()
+    report=collect_candidates(words,comet)
+    current=next(c for c in report['candidates'] if c['group_index']==0)
+    payload=candidate_payload(report,current,[current],current['signals'],mode='Весь текст',identity='test')
+    for side in ('source','target'):
+        assert all(p['pick']==current['id'] for r in payload['panes'][side]['sentences'] for p in r['pieces'] if p['suspect'])
+
+
+def test_candidate_component_callback_updates_dropdown_and_rejects_stale_events():
+    from streamlit.testing.v1 import AppTest
+    script='''
+import streamlit as st
+from src.ui.components.candidate_review import _pick
+st.session_state['candidate_reader']={'pick':{'identity':'new','id':'group-2'}}
+_pick('candidate_reader','old',['group-0','group-2'])
+assert 'candidate_index' not in st.session_state
+_pick('candidate_reader','new',['group-0','group-2'])
+assert st.session_state['candidate_index']==1
+'''
+    assert not AppTest.from_string(script).run().exception
