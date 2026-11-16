@@ -5,12 +5,13 @@ import streamlit as st
 from src.processing.pipeline.config import folder
 from src.processing.evaluation.cometkiwi import DEFAULT_MODEL
 from src.ui.components.jobs import submit
+from src.ui.components.fragments import fragment_selector, fragment_navigation
 
 
 def render_quality(root: Path):
     st.subheader('Оценка перевода · COMETKiwi')
-    st.caption('Оценивается всё окно: предыдущая группа Vecalign + центральная + следующая. '
-               'На границах документа соседей меньше. Балл не является вероятностью ошибки.')
+    st.caption('Фиксированные или адаптивные окна вокруг центральной группы Vecalign. '
+               'Оценивается весь фрагмент; балл не является вероятностью ошибки.')
     with st.expander('Модель и параметры запуска'):
         settings_path = root / 'data/cometkiwi_settings.json'
         try:
@@ -25,6 +26,14 @@ def render_quality(root: Path):
             python = st.text_input('Python отдельного окружения COMETKiwi', value=settings.get('python', ''),
                                    help=r'Например D:\piton\.venv-comet12\Scripts\python.exe. COMET устанавливается отдельно от Streamlit.')
             batch = st.number_input('Размер батча', min_value=1, max_value=128, value=int(settings.get('batch_size', 8)))
+            strategy = st.selectbox('Сборка контекста', ['fixed', 'adaptive'],
+                                    index=1 if settings.get('window_strategy') == 'adaptive' else 0,
+                                    format_func=lambda value: 'Адаптивная' if value == 'adaptive' else 'Фиксированная · три группы')
+            extra = st.number_input('Максимум дополнительных групп', min_value=0, max_value=100,
+                                    value=int(settings.get('max_extra_groups', 6)))
+            limit = st.number_input('Верхний лимит токенов на сторону', min_value=1, max_value=8192,
+                                    value=int(settings.get('max_tokens', 510)),
+                                    help='Фактический предел дополнительно ограничивается моделью и её токенизатором.')
             gpu = st.checkbox('Использовать GPU', value=bool(settings.get('gpus', 0)))
             st.caption('Модель загружается один раз на задачу и используется для всех выбранных переводов. '
                        'Для первой загрузки могут потребоваться доступ к Hugging Face и принятие лицензии модели. '
@@ -34,13 +43,14 @@ def render_quality(root: Path):
                     st.error('Укажите модель или checkpoint')
                 else:
                     settings_path.parent.mkdir(parents=True, exist_ok=True)
-                    settings_path.write_text(json.dumps({'model': model.strip(), 'batch_size': int(batch), 'gpus': int(gpu), 'python': python.strip()}, indent=2), encoding='utf-8')
+                    settings_path.write_text(json.dumps({**settings, 'model': model.strip(), 'batch_size': int(batch), 'gpus': int(gpu), 'python': python.strip(),
+                                                         'window_strategy': strategy, 'max_extra_groups': int(extra), 'max_tokens': int(limit)}, indent=2), encoding='utf-8')
                     st.success('Параметры сохранены для следующей задачи')
     current = st.session_state.get('ui_job')
     running = bool(current and current['process'].poll() is None)
     if st.button('Оценить выбранные переводы', disabled=running, key='quality_run'):
         submit(root, 'cometkiwi', st.session_state.get('ui_docs', ['original-rus', 'glenny-translation-en', 'pevear-translation-en']), 3)
-    files = sorted(folder(root, 'translation_quality').glob('*.cometkiwi.json'))
+    files = sorted(folder(root, 'translation_quality').glob('*.cometkiwi*.json'))
     if not files:
         st.info('Результатов пока нет. Нужны нормализованные предложения и выравнивание Vecalign. Запустите этап COMETKiwi.')
         return
@@ -63,10 +73,17 @@ def render_quality(root: Path):
         if not windows:
             st.info('Нет окон для выбранного фильтра')
             return
-        selected = st.selectbox('Центральная группа Vecalign', list(range(len(windows))),
-                                format_func=lambda i: f"№{windows[i]['center_group_index']} · {windows[i]['verdict']['score']}", key='quality_window')
+        selected = fragment_selector(windows, key='quality_window', label='Центральная группа Vecalign',
+                                     identity=lambda w: w['center_group_index'],
+                                     format_func=lambda i: f"№{windows[i]['center_group_index']} · {windows[i]['verdict']['score']}",
+                                     indicator=lambda w: f"№{w['center_group_index']} · оценка окна {w['verdict']['score']}",
+                                     scope=(str(path), path.stat().st_mtime_ns), show_buttons=False)
         window = windows[selected]
         verdict = window['verdict']
+        st.caption(f"Контекст: {data.get('window_config', {}).get('strategy', 'fixed')} · группы {window['group_indices']}")
+        if 'context' in window:
+            with st.expander('Сборка окна и токены'):
+                st.json(window['context'])
         if verdict['status'] == 'scored':
             st.metric('Оценка всего окна · выше — лучше', f"{verdict['score']:.4f}")
         elif verdict['status'] == 'too_long':
@@ -77,6 +94,8 @@ def render_quality(root: Path):
             st.warning('В окне есть группа с пустой стороной. Требуется проверка выравнивания.')
         st.caption('Центральная запись')
         st.code(window['center_alignment']['vecalign_line'], language=None)
+        fragment_navigation(windows, selected=selected, key='quality_window',
+                            indicator=lambda w: f"№{w['center_group_index']} · оценка окна {w['verdict']['score']}")
         left, right = st.columns(2)
         for column, key, title in [(left, 'source', 'Оригинал'), (right, 'target', 'Перевод')]:
             with column:

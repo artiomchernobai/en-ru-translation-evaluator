@@ -1,5 +1,6 @@
 """Reject stale or incompatible word/COMET results before joining them."""
 import math
+from src.processing.evaluation.context_validation import validate_context
 from src.processing.alignment.sentences import validate_alignment, ALIGNMENT, parse_indices
 
 
@@ -51,11 +52,14 @@ def validate_inputs(words, comet):
     radius = comet['radius']
     if type(radius) is not int or radius < 0:
         raise ValueError('Invalid COMET window radius')
+    config = comet.get('window_config', {})
+    if config.get('strategy') == 'adaptive' and config.get('max_tokens') != comet.get('model', {}).get('max_tokens'):
+        raise ValueError('Adaptive token budget differs from the COMET model metadata')
     for i, (block, window) in enumerate(zip(blocks, windows)):
         if block['block_id'] != i or window['center_group_index'] != i:
             raise ValueError('Invalid group ordering')
-        ids = list(range(max(0, i-radius), min(len(blocks), i+radius+1)))
-        if window['group_indices'] != ids or len(window['alignments']) != len(ids):
+        ids = validate_context(window, i, len(blocks), radius, config)
+        if len(window['alignments']) != len(ids):
             raise ValueError('Invalid COMET window groups')
         for j, entry in zip(ids, window['alignments']):
             match = ALIGNMENT.fullmatch(entry['vecalign_line'])

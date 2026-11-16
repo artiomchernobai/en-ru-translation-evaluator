@@ -5,19 +5,20 @@ import subprocess
 from src.processing.pipeline.config import SOURCE, TARGETS, folder
 from src.processing.pipeline.io import check_file
 from .io import configured_backend, evaluate_files
-from .settings import read_settings
+from .settings import read_settings, window_options, result_suffix
 
 
 def selected_pairs(root: Path, docs: list[str]):
     targets = [doc for doc in TARGETS if doc in docs]
     if SOURCE not in docs or not targets:
         raise ValueError('Для COMETKiwi выберите оригинал и хотя бы один перевод')
+    suffix = result_suffix(window_options(read_settings(root))['strategy'])
     pairs = []
     for target in targets:
         pairs.append((check_file(folder(root, 'normalized') / f'{SOURCE}.json'),
                       check_file(folder(root, 'normalized') / f'{target}.json'),
                       check_file(folder(root, 'aligned') / f'{SOURCE}_{target}.align'),
-                      folder(root, 'translation_quality') / f'{SOURCE}_{target}.cometkiwi.json'))
+                      folder(root, 'translation_quality') / f'{SOURCE}_{target}.cometkiwi{suffix}.json'))
     return pairs
 
 
@@ -46,6 +47,7 @@ def stage_cometkiwi(root: Path, docs: list[str], max_size: int) -> None:
 
 def evaluate_pairs(root, pairs):
     """Used inside the chosen environment; never launches another interpreter."""
+    options = window_options(read_settings(root))
     backend = configured_backend(root)
     for source, target, alignment, output in pairs:
-        evaluate_files(source, target, alignment, output, backend=backend)
+        evaluate_files(source, target, alignment, output, backend=backend, **options)

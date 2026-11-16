@@ -36,10 +36,13 @@ class CometKiwiBackend:
         model.eval()
         return cls(model, model_name=model_name, checkpoint=checkpoint, **kwargs)
 
+    def count_tokens(self, text):
+        return len(self.tokenizer.encode(text, add_special_tokens=True, truncation=False))
+
     def predict(self, pairs):
         results, accepted, positions = [], [], []
         for i, pair in enumerate(pairs):
-            lengths = {key: len(self.tokenizer.encode(pair[key], add_special_tokens=True, truncation=False)) for key in ('src', 'mt')}
+            lengths = {key: self.count_tokens(pair[key]) for key in ('src', 'mt')}
             if max(lengths.values()) > self.max_tokens:
                 results.append({'status': 'too_long', 'score': None, 'token_counts': lengths})
             else:

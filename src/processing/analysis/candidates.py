@@ -64,7 +64,8 @@ def collect_candidates(words, comet, *, low_quantile=.1, high_quantile=.9, gloss
                           for i in window['group_indices']]})
     candidates.sort(key=lambda item: (-item['priority'], item['group_index']))
     return {'schema_version': 1, 'analysis_version': 'candidate_rules_ru_en_v1',
-            'semantic_analysis': 'not_run', 'source_document': words['source']['document_id'],
+            'semantic_analysis': 'not_run',
+            'window_config': deepcopy(comet.get('window_config', {'strategy': 'fixed', 'radius': comet['radius']})), 'source_document': words['source']['document_id'],
             'target_document': words['target']['document_id'],
             'offsets': deepcopy(words['offsets']), 'source': deepcopy(words['source']), 'target': deepcopy(words['target']),
             'selected_word_method': words['selected_method'],
