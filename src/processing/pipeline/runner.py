@@ -10,6 +10,8 @@ from src.processing.evaluation.stages import stage_cometkiwi
 
 from src.processing.analysis.stages import stage_candidates
 
+from src.processing.mqm.stages import stage_mqm
+
 FUNCTIONS = {
     "clean": stage_clean,
     "segment": stage_segment,
@@ -21,6 +23,7 @@ FUNCTIONS = {
     "cometkiwi": stage_cometkiwi,
     "candidates": stage_candidates,
     "corpus": stage_corpus,
+    "mqm": stage_mqm,
 }
 
 

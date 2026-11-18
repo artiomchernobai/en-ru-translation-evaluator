@@ -160,9 +160,13 @@ def build_word_alignments():
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Text processing pipeline")
-    parser.add_argument('--stage', choices=('all', 'word_align', 'cometkiwi', 'candidates'), default='all',
-                        help='Run the full pipeline, word alignment, COMETKiwi, or review-candidate screening')
+    parser.add_argument('--stage', choices=('all', 'word_align', 'cometkiwi', 'candidates', 'mqm'), default='all',
+                        help='Run the full pipeline or a standalone word_align, cometkiwi, candidates or mqm stage')
     args = parser.parse_args(argv)
+    if args.stage == 'mqm':
+        from src.processing.mqm.stages import stage_mqm
+        stage_mqm(BASE_DIR, list(DOCUMENTS), 3)
+        return
     if args.stage == 'candidates':
         from src.processing.analysis.stages import stage_candidates
         stage_candidates(BASE_DIR, list(DOCUMENTS), 3)
@@ -247,6 +251,9 @@ def main(argv=None):
         },
         output_path=TRAINING_DIR / "boundary_candidates.csv"
     )
+
+    from src.processing.mqm.stages import stage_mqm
+    stage_mqm(BASE_DIR, list(DOCUMENTS), 3)
 
     print("\nPipeline completed successfully.")
 
