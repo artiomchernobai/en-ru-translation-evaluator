@@ -8,6 +8,8 @@ from src.ui.components.jobs import submit
 from src.ui.components.fragments import fragment_selector, fragment_navigation
 from src.processing.analysis.io import load_settings
 from src.processing.evaluation.settings import read_settings
+from src.ui.candidate_model import candidate_payload
+from src.ui.components.candidate_review import show_candidate_review
 
 
 def highlight(text, spans):
@@ -42,7 +44,8 @@ def save_strategy(root):
 def render_candidates(root: Path):
     st.subheader('Кандидаты на проверку')
     st.caption('Кандидаты требуют проверки · нормализованный текст · MQM пока не запускался.')
-    mode_column, run_column = st.columns([3, 1], vertical_alignment='bottom')
+    view_column, mode_column, run_column = st.columns([2, 2, 1], vertical_alignment='bottom')
+    view_mode = view_column.selectbox('Область просмотра', ['Фрагмент', 'Весь текст'], key='candidate_view_mode')
     try:
         settings = load_settings(root)
         default_strategy = settings.get('window_strategy', read_settings(root).get('window_strategy', 'fixed'))
@@ -98,15 +101,10 @@ def render_candidates(root: Path):
                 st.write(f"{signal['code']}: {signal['message']}")
         fragment_navigation(items, selected=index, key='candidate_index',
                             indicator=lambda c: f"№{c['group_index']} · приоритет {c['priority']}")
-        columns = st.columns(2)
-        for column, side, label in zip(columns, ('source', 'target'), ('Оригинал', 'Перевод')):
-            with column:
-                st.caption(label)
-                with st.container(height=420, border=True):
-                    for record in task['window'][side]['sentences']:
-                        spans = [s for signal in signals for s in signal[side+'_spans'] if s['sentence_index'] == record['index']]
-                        st.caption(f"[{record['index']}] · ID {record['sentence_id']}")
-                        st.html(highlight(record['text'], spans))
+        payload = candidate_payload(data, candidate, items, signals, mode=view_mode,
+                                    identity=f'{path}:{path.stat().st_mtime_ns}')
+        st.caption('Ярко — выбранное основание · голубой фон — контекст · приглушённые отметки — остальные кандидаты. Нажмите на отметку для выбора ближайшего кандидата текущего фильтра.')
+        show_candidate_review(payload, ids=[item['id'] for item in items])
         with st.expander('Координаты, токены и основания'):
             st.json(signals)
         st.caption('Записи Vecalign и контекст окна')
