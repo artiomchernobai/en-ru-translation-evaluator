@@ -48,6 +48,15 @@ def application(tmp_path):
     quality_output = tmp_path/'data/translation_quality/test.cometkiwi.json'
     quality_output.parent.mkdir(parents=True)
     quality_output.write_text(json.dumps(quality), encoding='utf-8')
+    from src.processing.mqm.engine import analyze
+    class MQMBrowserJudge:
+        metadata={'name':'browser-local-MQM'}
+        def judge(self,request):
+            return {'findings':[{'category':'Accuracy/Mistranslation','severity':'minor','explanation':'Тестовое замечание.',
+                    'source_spans':[{'sentence_index':0,'quote':'книгу'}],'target_spans':[{'sentence_index':0,'quote':'books'}]}] if request['center_group_index']==0 else []}
+    mqm=analyze(candidates,MQMBrowserJudge())
+    mqm_path=tmp_path/'data/mqm_reports/test.mqm.json';mqm_path.parent.mkdir(parents=True)
+    mqm_path.write_text(json.dumps(mqm),encoding='utf-8')
     for document in (src, tgt):
         path = tmp_path/f"data/raw/{document['document']}.txt"
         path.parent.mkdir(exist_ok=True)
@@ -187,3 +196,18 @@ def test_candidate_evidence_highlighting_and_safe_text(application):
             playwright.expect(page.get_by_role('button', name='Кандидаты на проверку', exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
             assert not dialogs
+
+
+def test_mqm_report_metrics_and_citations(application):
+    with playwright.sync_playwright() as p:
+        executable=os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox']) as browser:
+            page=browser.new_page(viewport={'width':1600,'height':1000})
+            page.goto(application)
+            page.get_by_text('MQM',exact=True).click()
+            playwright.expect(page.get_by_role('heading',name='MQM · локальный анализ перевода',exact=True)).to_be_visible()
+            playwright.expect(page.get_by_text('Accuracy/Mistranslation · minor: Тестовое замечание.',exact=True)).to_be_visible()
+            playwright.expect(page.locator('mark').first).to_have_text('книгу')
+            playwright.expect(page.get_by_role('button',name='MQM — анализ локальной моделью',exact=True)).to_have_count(1)
+            assert not page.get_by_test_id('stException').count()
+            page.screenshot(path='/tmp/mqm-report-view.png')

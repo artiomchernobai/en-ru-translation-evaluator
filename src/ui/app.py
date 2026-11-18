@@ -6,6 +6,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st
+from src.ui.views.mqm import render_mqm
 from src.ui.views.candidates import render_candidates
 from src.ui.views.quality import render_quality
 from src.ui.views.files import render_files
@@ -35,7 +36,7 @@ def configure_page() -> None:
 def main(root: Path = ROOT) -> None:
     configure_page()
     st.title("Text Pipeline · Workbench")
-    page = st.radio("Навигация", ["Файлы", "Проверка", "Выравнивание", "Оценка перевода", "Кандидаты", "Настройки"],
+    page = st.radio("Навигация", ["Файлы", "Проверка", "Выравнивание", "Оценка перевода", "Кандидаты", "MQM", "Настройки"],
                     horizontal=True, label_visibility="collapsed", key="navigation")
     central, sidebar = st.columns([5.3,1.7],gap="medium")
     with central:
@@ -44,6 +45,7 @@ def main(root: Path = ROOT) -> None:
         elif page=="Выравнивание": render_alignment(root)
         elif page=="Оценка перевода": render_quality(root)
         elif page=="Кандидаты": render_candidates(root)
+        elif page=="MQM": render_mqm(root)
         else: render_settings(root)
     with sidebar:
         render_controls(root)
