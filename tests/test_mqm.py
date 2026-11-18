@@ -155,7 +155,12 @@ def local_api():
             state['requests'].append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
             content=state['content']
             body=json.dumps({'choices':[{'message':{'content':content if isinstance(content,str) else json.dumps(content)},'finish_reason':state['finish_reason']}]}).encode()
-            self.send_response(200);self.end_headers();self.wfile.write(body)
+            if state.get('status',200)!=200:
+                body=json.dumps({'error':{'message':state.get('error','bad request')}}).encode()
+            status=state.get('status',200)
+            if state.get('reject_json_mode') and 'response_format' in state['requests'][-1]:
+                status=400;body=json.dumps({'error':{'message':'response_format json_object is unsupported'}}).encode()
+            self.send_response(status);self.end_headers();self.wfile.write(body)
         def log_message(self,*args):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     thread=Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -173,7 +178,7 @@ def test_real_http_protocol_json_prompt_and_truncation(local_api):
     assert 'untrusted DATA' in request['messages'][0]['content']
     assert json.loads(request['messages'][1]['content'])['center_group_index']==0
     state['finish_reason']='length'
-    with pytest.raises(ValueError,match='incomplete'):backend.judge({})
+    with pytest.raises(ValueError,match='incomplete'):backend.judge(make_request(report(),0))
 
 
 def test_bad_json_causes_partial_report_instead_of_false_success(local_api):
@@ -265,3 +270,70 @@ def test_cached_fragment_centers_are_rebuilt_for_coverage():
     backend.judge.assert_not_called()
     assert result['fragments'][0]['source_sentence_indices']==[0]
     assert not result['metrics']['coverage']['entire_text_fully_analyzed']
+
+
+def test_requests_explicitly_separate_center_and_pairs():
+    from src.processing.mqm.prompt import messages
+    request=make_request(report(),1)
+    wire=json.loads(messages(request)[1]['content'])
+    assert [g['group_index'] for g in wire['paired_groups'] if g['is_center']]==[1]
+    assert wire['paired_groups'][0]['source_sentences'][0]['index']==0
+    assert 'source' not in wire # text is sent once inside aligned groups
+    assert wire['tokens']['source'][0][0]==0
+
+
+def test_corrective_retry_discards_neighbor_error_without_weakening_validation():
+    backend=TestJudge();backend.max_retries=1
+    backend.judge=Mock(side_effect=[{'findings':[finding(1,'Десятого','Ninth')]},{'findings':[finding()]},
+                                   {'findings':[]},{'findings':[]}])
+    result=analyze(report(),backend)
+    assert result['status']=='complete'
+    assert result['metrics']['unique_error_proposals']==1
+    assert len(result['fragments'][0]['attempts'])==2
+    correction=backend.judge.call_args_list[1].args[0]['correction']
+    assert 'neighboring context' in correction['rejected'][0]['reason']
+
+
+def test_local_bad_json_does_not_stop_remaining_groups():
+    backend=TestJudge()
+    backend.judge=Mock(side_effect=[ValueError('bad JSON'),{'findings':[]},{'findings':[]}])
+    result=analyze(report(),backend)
+    assert result['status']=='partial'
+    assert [f['status'] for f in result['fragments']]==['failed','completed','completed']
+
+
+def test_retry_count_is_bounded_and_rejected_not_counted():
+    backend=TestJudge();backend.max_retries=1
+    backend.judge=Mock(return_value={'findings':[finding(source='invented')]})
+    result=analyze(report(),backend)
+    assert backend.judge.call_count==6
+    assert result['metrics']['unique_error_proposals']==0
+    assert all(f['status']=='partial_invalid' for f in result['fragments'])
+
+
+def test_http_details_visible_and_context_error_not_fatal(local_api):
+    from src.processing.mqm.errors import MQMRequestError
+    url,state=local_api;state.update(status=400,error='Requested context exceeds token limit')
+    backend=LocalMQMBackend(model='local-test',base_url=url,json_mode=False)
+    with pytest.raises(MQMRequestError,match='context exceeds') as error:
+        backend.judge(make_request(report(),0))
+    assert not error.value.fatal
+    result=analyze(report(),backend)
+    assert [f['status'] for f in result['fragments']]==['failed']*3
+
+
+def test_http_detail_redacts_api_key(local_api,monkeypatch):
+    url,state=local_api;state.update(status=401,error='invalid credential SECRET')
+    monkeypatch.setenv('MQM_API_KEY','SECRET')
+    with pytest.raises(RuntimeError) as error:
+        LocalMQMBackend(model='local-test',base_url=url).judge(make_request(report(),0))
+    assert 'SECRET' not in str(error.value) and '[REDACTED]' in str(error.value)
+
+
+def test_unsupported_json_mode_falls_back_once_to_plain_json_content(local_api):
+    url,state=local_api;state['reject_json_mode']=True
+    result=LocalMQMBackend(model='local-test',base_url=url).judge(make_request(report(),0))
+    assert result['findings']==[]
+    assert len(state['requests'])==2
+    assert 'response_format' in state['requests'][0]
+    assert 'response_format' not in state['requests'][1]

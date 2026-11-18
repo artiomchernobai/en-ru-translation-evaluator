@@ -6,6 +6,8 @@ from copy import deepcopy
 from .contracts import validate_candidates, make_request, validate_judgment
 from .metrics import summarize, DEFAULT_WEIGHTS, fragment_metrics
 from .prompt import PROMPT_VERSION
+from .judging import judge_fragment
+from .errors import MQMRequestError
 
 
 def fingerprint(value):
@@ -62,15 +64,15 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
                       'findings':[],'observations':[],'rejected':[]}
             try:
                 print(f'[MQM] Анализ группы {index} локальной моделью {backend.metadata["name"]}',flush=True)
-                result=validate_judgment(backend.judge(request),data,request)
-                fragment.update(result,status='partial_invalid' if result['rejected'] else 'completed')
+                fragment.update(judge_fragment(data,request,backend))
             except (ValueError,RuntimeError,TypeError,KeyError,IndexError) as error:
-                fragment.update(status='failed',error=str(error))
+                fragment.update(status='failed',error=str(error),fatal=isinstance(error,RuntimeError) and getattr(error,'fatal',True))
         fragment['metrics']=fragment_metrics(data,fragment,weights)
         report['fragments'].append(fragment)
         print(f'[MQM] {position+1}/{len(indices)} group {index}: {fragment["status"]}',flush=True)
         update('running')
-        if fragment['status']=='failed':
+        if fragment.get('error'):print(f'[MQM] group {index}: {fragment["error"]}',flush=True)
+        if fragment['status']=='failed' and fragment.get('fatal',False):
             # A server/model failure should not produce hundreds of identical failed calls.
             for pending in indices[position+1:]:
                 report['fragments'].append({'group_index':pending,'status':'not_run_after_failure',

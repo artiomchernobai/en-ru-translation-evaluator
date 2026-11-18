@@ -13,14 +13,14 @@ from .engine import analyze
 def read_settings(root):
     path=Path(root)/'data/mqm_settings.json'
     settings=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision'}
+    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision','max_retries'}
     if not isinstance(settings,dict) or set(settings)-allowed:raise ValueError('Unsupported MQM settings')
     return settings
 
 
 def configured_judge(settings):
     backend=LocalMQMBackend(model=settings.get('model',''),base_url=settings.get('base_url','http://127.0.0.1:1234/v1'),
-                            timeout=settings.get('timeout',120),max_tokens=settings.get('max_tokens',2048),json_mode=settings.get('json_mode',True))
+                            timeout=settings.get('timeout',120),max_tokens=settings.get('max_tokens',2048),json_mode=settings.get('json_mode',True),max_retries=settings.get('max_retries',1))
     backend.metadata['revision']=settings.get('revision','unspecified')
     return backend
 

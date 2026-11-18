@@ -28,6 +28,7 @@ def render_mqm(root: Path):
             timeout=st.number_input('Ожидание ответа, секунд',min_value=1,max_value=3600,value=int(settings.get('timeout',120)))
             tokens=st.number_input('Максимум токенов ответа',min_value=128,max_value=32768,value=int(settings.get('max_tokens',2048)))
             json_mode=st.checkbox('Запрашивать режим JSON у сервера',value=bool(settings.get('json_mode',True)))
+            retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
             resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
             st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
                        'не принимаются как успешный анализ. Изменив веса модели, укажите новую версию либо отключите продолжение.')
@@ -35,7 +36,7 @@ def render_mqm(root: Path):
                 try:
                     LocalMQMBackend(model=model,base_url=url,timeout=timeout,max_tokens=int(tokens),json_mode=json_mode)
                     atomic_json(root/'data/mqm_settings.json',{'model':model,'base_url':url,'revision':revision,'scope':scope,
-                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume})
+                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries)})
                     st.success('Настройки сохранены')
                 except ValueError as error:st.error(str(error))
     current=st.session_state.get('ui_job')
