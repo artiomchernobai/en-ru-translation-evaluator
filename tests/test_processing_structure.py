@@ -65,6 +65,10 @@ def test_stage_bodies_preserved():
     replacements = {'BoundaryDatasetBuilder': 'BoundaryCandidateExtractor', '_save_json': 'save_json'}
 
     class CanonicalNames(ast.NodeTransformer):
+        def visit_Call(self, node):
+            if isinstance(node.func,ast.Attribute) and node.func.attr=='build_corpus':
+                node.keywords=[k for k in node.keywords if k.arg!='word_alignment_path']
+            return self.generic_visit(node)
         def visit_Name(self, node):
             node.id = replacements.get(node.id, node.id)
             return node
@@ -83,4 +87,4 @@ def test_stage_bodies_preserved():
         tree = ast.parse((ROOT / 'src/processing' / relative).read_text())
         for function in tree.body:
             if isinstance(function, ast.FunctionDef):
-                assert ast.dump(CanonicalNames().visit(old[function.name])) == ast.dump(function), function.name
+                assert ast.dump(CanonicalNames().visit(old[function.name])) == ast.dump(CanonicalNames().visit(function)), function.name

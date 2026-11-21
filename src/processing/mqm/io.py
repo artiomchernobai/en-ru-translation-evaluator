@@ -38,19 +38,25 @@ def atomic_json(path, result):
         if temporary:temporary.unlink(missing_ok=True)
 
 
-def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0):
+def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0, corpus_path=None):
     candidate_path,output_path=Path(candidate_path),Path(output_path)
     if candidate_path.resolve()==output_path.resolve():raise ValueError('MQM output must not overwrite candidates')
     payload=candidate_path.read_bytes()
     data=json.loads(payload.decode('utf-8-sig'))
     if window_strategy is not None and data.get('window_config',{}).get('strategy','fixed')!=window_strategy:
         raise ValueError('MQM context strategy differs from the selected candidate mode')
+    corpus_payload=None
+    if corpus_path is not None:
+        from .contracts import attach_corpus
+        corpus_payload=Path(corpus_path).read_bytes()
+        data=attach_corpus(data,json.loads(corpus_payload.decode('utf-8-sig')))
     previous=None
     if resume and output_path.exists():
         try:previous=json.loads(output_path.read_text(encoding='utf-8'))
         except (ValueError,OSError):pass
     def save(report):
         report['inputs']={'candidates':{'path':str(candidate_path),'sha256':hashlib.sha256(payload).hexdigest()}}
+        if corpus_payload is not None:report['inputs']['corpus']={'path':str(corpus_path),'sha256':hashlib.sha256(corpus_payload).hexdigest()}
         report['updated_at']=datetime.now(timezone.utc).isoformat()
         atomic_json(output_path,report)
     result=analyze(data,backend,scope=scope,previous=previous,progress=save,max_fragments=max_fragments,min_priority=min_priority)
@@ -62,12 +68,13 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description='Local GEMBA-MQM-style review of candidates')
     parser.add_argument('--candidates',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--corpus',type=Path)
     parser.add_argument('--model',required=True)
     parser.add_argument('--base-url',default='http://127.0.0.1:1234/v1')
     parser.add_argument('--scope',choices=('candidates','all'),default='candidates')
     parser.add_argument('--no-resume',action='store_true')
     args=parser.parse_args(argv)
-    result=analyze_file(args.candidates,args.output,backend=LocalMQMBackend(model=args.model,base_url=args.base_url),scope=args.scope,resume=not args.no_resume)
+    result=analyze_file(args.candidates,args.output,backend=LocalMQMBackend(model=args.model,base_url=args.base_url),scope=args.scope,resume=not args.no_resume,corpus_path=args.corpus)
     if result['status']!='complete':raise SystemExit('MQM completed partially; inspect the saved report')
 
 

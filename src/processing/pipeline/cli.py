@@ -141,6 +141,7 @@ def build_corpora(corpus_builder):
 
             output=CORPUS_DIR / f"{source_document}_{target_document}.json",
 
+            word_alignment_path=WORD_ALIGNMENT_DIR / f"{source_document}_{target_document}.json",
             source_document=source_document,
             target_document=target_document
         )

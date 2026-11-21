@@ -54,7 +54,7 @@ def render_mqm(root: Path):
         report=json.loads(path.read_text(encoding='utf-8'))
         if report.get('schema_version')!=1:raise ValueError('Неподдерживаемый формат отчёта')
         metrics=report['metrics'];coverage=metrics['coverage']
-        st.caption(f"{report['model']['name']} · статус {report['status']} · проверено {coverage['analyzed_groups']}/{coverage['total_groups']} групп")
+        st.caption(f"{report['model']['name']} · статус {report['status']} · окон {coverage['analyzed_groups']} · охвачено {coverage.get('covered_groups',coverage['analyzed_groups'])}/{coverage['total_groups']} групп")
         if report['status']!='complete':st.warning('Отчёт неполный. Проверьте ошибки фрагментов; повторный запуск продолжит работу.')
         if not coverage['entire_text_fully_analyzed']:
             st.warning('Проверена часть текста. Частота по всему документу — наблюдаемое число предложенных ошибок на объём текста, без экстраполяции.')

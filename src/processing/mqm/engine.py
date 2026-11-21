@@ -34,7 +34,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
     report={'schema_version':1,'source_document':data['source_document'],'target_document':data['target_document'],
             'source':deepcopy(data['source']),'target':deepcopy(data['target']),
             'window_config':deepcopy(data.get('window_config',{})),
-            'model':deepcopy(backend.metadata),'scope':scope,'run_fingerprint':run_id,
+            'model':deepcopy(backend.metadata),'scope':scope,'assessment_unit':'entire_fragment','anchor_role':'navigation_only','run_fingerprint':run_id,
             'selection':{'max_fragments':max_fragments,'min_priority':min_priority},
             'status':'running','fragments':[],'findings':[],'metrics':{}}
     def update(status):
@@ -73,6 +73,8 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
                 fragment.update(judge_fragment(data,request,backend))
             except (ValueError,RuntimeError,TypeError,KeyError,IndexError) as error:
                 fragment.update(status='failed',error=str(error),fatal=isinstance(error,RuntimeError) and getattr(error,'fatal',True))
+        fragment['assessed_source_sentence_indices']=[s['index'] for s in request['source']['sentences']]
+        fragment['assessed_target_sentence_indices']=[s['index'] for s in request['target']['sentences']]
         fragment['elapsed_seconds']=round(time.perf_counter()-started,3)
         fragment['metrics']=fragment_metrics(data,fragment,weights)
         report['fragments'].append(fragment)

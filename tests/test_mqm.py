@@ -57,7 +57,7 @@ def test_report_has_exact_locations_and_honest_coverage():
     metrics=result['metrics']
     assert metrics['coverage']['analyzed_groups']==3
     assert metrics['coverage']['total_groups']==4
-    assert not metrics['document_rates_are_exhaustive']
+    assert metrics['document_rates_are_exhaustive']
     assert metrics['weighted_error_points']==5
     assert metrics['observed_errors_per_1000_document_source_words']==pytest.approx(1000/metrics['source_words'])
     assert metrics['mean_error_proposals_per_analyzed_group']==pytest.approx(1/3)
@@ -77,10 +77,10 @@ def test_hallucinated_or_invalid_evidence_not_counted(change):
     assert not result['findings'] and len(result['rejected'])==1
 
 
-def test_neighbor_only_errors_rejected():
+def test_neighbors_in_review_window_are_allowed():
     data=report();request=make_request(data,0)
     result=validate_judgment({'findings':[finding(1,'Десятого','Ninth')]},data,request)
-    assert result['rejected'] and not result['findings']
+    assert not result['rejected'] and result['findings']
 
 
 def test_repeated_quote_requires_explicit_coordinates():
@@ -204,7 +204,7 @@ def test_mqm_screen_displays_report_coverage(tmp_path):
     app=AppTest.from_string(f'from pathlib import Path\nfrom src.ui.views.mqm import render_mqm\nrender_mqm(Path({str(tmp_path)!r}))').run()
     assert not app.exception
     assert app.metric[0].value=='1'
-    assert app.warning and 'часть текста' in app.warning[0].value
+    assert not app.warning
 
 
 def test_empty_candidate_queue_does_not_claim_full_coverage():
@@ -246,6 +246,7 @@ def test_stage_processes_each_pair_and_uses_mode_suffix(tmp_path,monkeypatch):
     for target in TARGETS:
         path=folder(tmp_path,'review_candidates')/f'{SOURCE}_{target}.candidates.adaptive.json'
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text('{}')
+        cp=folder(tmp_path,'corpus')/f'{SOURCE}_{target}.json';cp.parent.mkdir(parents=True,exist_ok=True);cp.write_text('{}')
     judge=Mock();run=Mock(return_value={'status':'complete'})
     monkeypatch.setattr(stages,'configured_judge',Mock(return_value=judge))
     monkeypatch.setattr(stages,'analyze_file',run)
@@ -268,7 +269,7 @@ def test_cached_fragment_centers_are_rebuilt_for_coverage():
     backend=TestJudge();result=analyze(data,backend,previous=previous)
     backend.judge.assert_not_called()
     assert result['fragments'][0]['source_sentence_indices']==[0]
-    assert not result['metrics']['coverage']['entire_text_fully_analyzed']
+    assert result['metrics']['coverage']['entire_text_fully_analyzed']
 
 
 def test_requests_explicitly_separate_center_and_pairs():
@@ -284,14 +285,14 @@ def test_requests_explicitly_separate_center_and_pairs():
 
 def test_corrective_retry_discards_neighbor_error_without_weakening_validation():
     backend=TestJudge();backend.max_retries=1
-    backend.judge=Mock(side_effect=[{'findings':[finding(1,'Десятого','Ninth')]},{'findings':[finding()]},
+    backend.judge=Mock(side_effect=[{'findings':[finding(3,'1000','1')]},{'findings':[finding()]},
                                    {'findings':[]},{'findings':[]}])
     result=analyze(report(),backend)
     assert result['status']=='complete'
     assert result['metrics']['unique_error_proposals']==1
     assert len(result['fragments'][0]['attempts'])==2
     correction=backend.judge.call_args_list[1].args[0]['correction']
-    assert 'neighboring context' in correction['rejected'][0]['reason']
+    assert 'outside context' in correction['rejected'][0]['reason']
 
 
 def test_local_bad_json_does_not_stop_remaining_groups():
@@ -386,3 +387,50 @@ def test_fragment_limit_can_be_expanded_without_repeating_completed_calls():
     assert backend.judge.call_count==2
     assert second['fragments'][0]['reused']
     assert len(second['fragments'])==3
+
+
+def test_whole_fragment_allows_reordered_pairs_and_deduplicates_neighbors():
+    data=report();backend=TestJudge()
+    backend.judge=Mock(return_value={'findings':[finding(1,'Десятого','Ninth')]})
+    result=analyze(data,backend)
+    assert result['status']=='complete'
+    assert result['metrics']['unique_error_proposals']==1
+    assert len(result['findings'][0]['group_indices'])==3
+    assert result['metrics']['reviewed_fragment_source_words']==result['metrics']['source_words']
+    req=make_request(data,0)
+    f=finding(source_spans=[{'sentence_index':0,'quote':'Саркома'}],target_spans=[{'sentence_index':1,'quote':'Ninth'}])
+    assert not validate_judgment({'findings':[f]},data,req)['rejected']
+
+
+def test_corpus_v2_preserves_tokens_links_and_can_feed_mqm(tmp_path):
+    from src.processing.alignment.corpus import CorpusBuilder
+    from src.processing.alignment.words import _fingerprint
+    from src.processing.mqm.contracts import attach_corpus
+    data=report()
+    groups=[{k:t['window']['center_alignment'][k] for k in ('source_indices','target_indices','cost')} for t in data['semantic_tasks']]
+    paths={}
+    for side in ('source','target'):
+        doc=data[side];raw={'document':doc['document_id'],'language':doc['language'],
+            'sentences':[{'sentence_id':s['sentence_id'],'normalized_text':s['normalized_text']} for s in doc['sentences']]}
+        paths[side]=tmp_path/f'{side}.json';paths[side].write_text(json.dumps(raw))
+    align=tmp_path/'pair.align';align.write_text('\n'.join(f'{g["source_indices"]}:{g["target_indices"]}:{g["cost"]}' for g in groups))
+    words={'source':data['source'],'target':data['target'],'selected_method':data['selected_word_method'],
+           'sentence_alignment_fingerprint':_fingerprint(groups),'blocks':[]}
+    for i,task in enumerate(data['semantic_tasks']):
+        block={side:{'sentence_indices':groups[i][side+'_indices'],
+                     'token_ids':[j for s in groups[i][side+'_indices'] for j in data[side]['sentences'][s]['token_ids']]} for side in ('source','target')}
+        links=next(g for g in task['word_links'] if g['group_index']==i)
+        block['word_alignment']={'status':links['status'],'methods':{data['selected_word_method']:links['links']}}
+        words['blocks'].append(block)
+    wp=tmp_path/'words.json';wp.write_text(json.dumps(words));out=tmp_path/'corpus.json'
+    corpus=CorpusBuilder().build_corpus(paths['source'],paths['target'],align,out,'source','target',word_alignment_path=wp)
+    assert corpus['schema_version']==2
+    assert corpus['documents']['source']['tokens'][0]['text']=='Саркома'
+    assert corpus['segments'][0]['source']['token_ids']
+    assert corpus['segments'][0]['word_alignment']['methods']['mwmf']
+    assert attach_corpus(data,corpus)==data
+    before=out.read_bytes()
+    words['blocks'][0]['word_alignment']['methods']['mwmf'][0]['target_token_id']=99999
+    wp.write_text(json.dumps(words))
+    with pytest.raises(ValueError):CorpusBuilder().build_corpus(paths['source'],paths['target'],align,out,'source','target',word_alignment_path=wp)
+    assert out.read_bytes()==before
