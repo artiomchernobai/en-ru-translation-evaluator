@@ -67,7 +67,6 @@ def test_report_has_exact_locations_and_honest_coverage():
 
 @pytest.mark.parametrize('change',[
     {'source_spans':[{'sentence_index':0,'quote':'несуществующая цитата'}]},
-    {'source_spans':[{'sentence_index':0,'quote':'Саркома','start':1,'end':8}]},
     {'severity':'catastrophic'}, {'category':'made-up'},
     {'source_spans':[]}, {'target_spans':[]},
     {'source_spans':[{'sentence_index':3,'quote':'1000'}]},
@@ -279,7 +278,8 @@ def test_requests_explicitly_separate_center_and_pairs():
     assert [g['group_index'] for g in wire['paired_groups'] if g['is_center']]==[1]
     assert wire['paired_groups'][0]['source_sentences'][0]['index']==0
     assert 'source' not in wire # text is sent once inside aligned groups
-    assert wire['tokens']['source'][0][0]==0
+    assert 'tokens' not in wire
+    assert 'tokens' in json.loads(messages(request,include_word_links=True)[1]['content'])
 
 
 def test_corrective_retry_discards_neighbor_error_without_weakening_validation():
@@ -337,3 +337,52 @@ def test_unsupported_json_mode_falls_back_once_to_plain_json_content(local_api):
     assert len(state['requests'])==2
     assert 'response_format' in state['requests'][0]
     assert 'response_format' not in state['requests'][1]
+
+
+def test_unique_exact_quote_repairs_bad_model_offsets():
+    data=report();request=make_request(data,0)
+    f=finding(source_spans=[{'sentence_index':0,'quote':'Саркома','start':1,'end':8}])
+    result=validate_judgment({'findings':[f]},data,request)
+    assert not result['rejected']
+    span=result['findings'][0]['source_spans'][0]
+    assert span['start']==0 and span['end']==7
+    assert span['offset_resolution']=='unique_exact_quote'
+
+
+def test_positional_citation_pair_is_normalized_but_not_guessed():
+    data=report();request=make_request(data,0)
+    f=finding(source_spans=[[0,'Саркома лёгкого']])
+    result=validate_judgment({'findings':[f]},data,request)
+    assert not result['rejected'] and result['findings'][0]['source_spans'][0]['quote']=='Саркома лёгкого'
+    f['source_spans']=[['invented']]
+    result=validate_judgment({'findings':[f]},data,request)
+    assert 'Citation must be an object' in result['rejected'][0]['reason']
+
+
+def test_hint_kind_becomes_uncertain_observation_not_error():
+    data=report();request=make_request(data,0)
+    note={'kind':'negation_mismatch','explanation':'Требуется проверка.',
+          'source_spans':[{'sentence_index':0,'quote':'Саркома'}],'target_spans':[]}
+    result=validate_judgment({'findings':[],'observations':[note]},data,request)
+    assert not result['rejected']
+    assert result['observations'][0]['kind']=='uncertain'
+    assert result['observations'][0]['model_kind']=='negation_mismatch'
+    assert not result['findings']
+
+
+def test_lean_prompt_is_smaller_and_preserves_aligned_texts():
+    from src.processing.mqm.prompt import messages
+    req=make_request(report(),0)
+    lean=messages(req)[1]['content'];detailed=messages(req,include_word_links=True)[1]['content']
+    assert len(lean)<len(detailed)
+    assert json.loads(lean)['paired_groups']==json.loads(detailed)['paired_groups']
+
+
+def test_fragment_limit_can_be_expanded_without_repeating_completed_calls():
+    data=report();first=analyze(data,TestJudge(),max_fragments=1)
+    assert len(first['fragments'])==1
+    assert not first['metrics']['coverage']['entire_text_fully_analyzed']
+    backend=TestJudge();second=analyze(data,backend,previous=first,max_fragments=0)
+    assert backend.judge.call_count==2
+    assert second['fragments'][0]['reused']
+    assert len(second['fragments'])==3

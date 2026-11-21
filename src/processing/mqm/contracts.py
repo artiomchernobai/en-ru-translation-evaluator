@@ -98,6 +98,9 @@ def _spans(raw, side, data, request):
     allowed = {s['index'] for s in request[side]['sentences']}
     result=[]
     for span in raw:
+        if isinstance(span,list) and len(span)==2 and type(span[0]) is int and isinstance(span[1],str):
+            span={'sentence_index':span[0],'quote':span[1]}
+        if not isinstance(span,dict):raise ValueError('Citation must be an object with sentence_index and quote')
         index, quote = span.get('sentence_index'), span.get('quote')
         if type(index) is not int or index not in allowed or not isinstance(quote,str) or not quote:
             raise ValueError('Citation missing or outside context')
@@ -108,9 +111,14 @@ def _spans(raw, side, data, request):
             if len(matches)!=1:
                 raise ValueError('Quote is absent or ambiguous; explicit offsets required')
             start,end=matches[0].span()
-        location=locate(data[side],index,start,end)
-        if location['quote'] != quote:
-            raise ValueError('Quote does not match its offsets')
+        try:
+            location=locate(data[side],index,start,end)
+            if location['quote'] != quote:raise ValueError('Quote does not match its offsets')
+        except ValueError:
+            matches=list(re.finditer(re.escape(quote),text))
+            if len(matches)!=1:raise ValueError('Quote is absent or ambiguous; valid offsets required')
+            location=locate(data[side],index,*matches[0].span())
+            location['offset_resolution']='unique_exact_quote'
         result.append(location)
     return result
 
@@ -125,6 +133,9 @@ def validate_judgment(raw, data, request):
                 if not isinstance(item,dict): raise ValueError('Finding must be an object')
                 if name=='findings' and (item.get('category') not in CATEGORIES or item.get('severity') not in SEVERITIES):
                     raise ValueError('Unknown MQM category or severity')
+                original_kind=item.get('kind')
+                if name=='observations' and original_kind in ('negation_mismatch','quantity_mismatch','terminology_mismatch','unlinked_content','sentence_gap','low_comet_window','high_vecalign_cost','comet_unscored','word_alignment_unavailable'):
+                    item={**item,'kind':'uncertain'}
                 if name=='observations' and item.get('kind') not in OBSERVATIONS:
                     raise ValueError('Unknown observation kind')
                 if not isinstance(item.get('explanation'),str) or not item['explanation'].strip():
@@ -138,6 +149,7 @@ def validate_judgment(raw, data, request):
                 if not any(s['sentence_index'] in request[side]['central_sentence_indices'] for side in spans for s in spans[side]):
                     raise ValueError('Finding concerns only neighboring context, not the center')
                 record={key:item[key] for key in (('category','severity') if name=='findings' else ('kind',))}
+                if name=='observations' and original_kind!=item['kind']:record['model_kind']=original_kind
                 record.update(explanation=item['explanation'], source_spans=spans['source'],target_spans=spans['target'],
                               status='needs_review',citation_validation='passed',semantic_validation='model_only')
                 if isinstance(item.get('suggestion'),str):record['suggestion']=item['suggestion']
