@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 from .backend import LocalMQMBackend
 from .engine import analyze
+from .reports import compact_report, restore_report, diagnostics
 
 
 def read_settings(root):
@@ -40,7 +41,11 @@ def atomic_json(path, result):
 
 def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0, corpus_path=None):
     candidate_path,output_path=Path(candidate_path),Path(output_path)
-    if candidate_path.resolve()==output_path.resolve():raise ValueError('MQM output must not overwrite candidates')
+    diagnostics_path=output_path.with_suffix('.diagnostics.json')
+    inputs=[candidate_path]+([Path(corpus_path)] if corpus_path is not None else [])
+    if any(p.resolve() in (output_path.resolve(),diagnostics_path.resolve()) for p in inputs):
+        raise ValueError('MQM output must not overwrite inputs')
+    if output_path.resolve()==diagnostics_path.resolve():raise ValueError('MQM report and diagnostics must have different paths')
     payload=candidate_path.read_bytes()
     data=json.loads(payload.decode('utf-8-sig'))
     if window_strategy is not None and data.get('window_config',{}).get('strategy','fixed')!=window_strategy:
@@ -52,16 +57,17 @@ def analyze_file(candidate_path, output_path, *, backend, scope='candidates', re
         data=attach_corpus(data,json.loads(corpus_payload.decode('utf-8-sig')))
     previous=None
     if resume and output_path.exists():
-        try:previous=json.loads(output_path.read_text(encoding='utf-8'))
-        except (ValueError,OSError):pass
+        try:previous=restore_report(json.loads(output_path.read_text(encoding='utf-8')),data)
+        except (ValueError,OSError,KeyError,TypeError,IndexError):pass
     def save(report):
         report['inputs']={'candidates':{'path':str(candidate_path),'sha256':hashlib.sha256(payload).hexdigest()}}
         if corpus_payload is not None:report['inputs']['corpus']={'path':str(corpus_path),'sha256':hashlib.sha256(corpus_payload).hexdigest()}
         report['updated_at']=datetime.now(timezone.utc).isoformat()
-        atomic_json(output_path,report)
+        atomic_json(diagnostics_path,diagnostics(report))
+        atomic_json(output_path,compact_report(report))
     result=analyze(data,backend,scope=scope,previous=previous,progress=save,max_fragments=max_fragments,min_priority=min_priority)
     print(f'[MQM] {result["status"]}; {output_path}',flush=True)
-    return result
+    return compact_report(result)
 
 
 def main(argv=None):

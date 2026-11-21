@@ -180,7 +180,7 @@ def test_candidate_screen_filters_and_locations(tmp_path):
     assert not app.exception
     app.multiselect(key='candidate_signals').set_value(['terminology_mismatch']).run()
     assert not app.exception
-    assert len(app.selectbox(key='candidate_index').options) == 1
+    assert len(app.selectbox(key='candidate_index').options) == 2  # Both windows contain the term candidate.
     assert any('terminology_mismatch' in item.value for item in app.markdown)
 
 

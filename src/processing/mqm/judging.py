@@ -17,9 +17,10 @@ def judge_fragment(data, request, backend):
             reasons=[r['reason'] for r in result['rejected']]
             print(f'[MQM] group {request["center_group_index"]}: rejected: {reasons}',flush=True)
             outgoing['correction']={'instruction':'Return a COMPLETE replacement JSON for the WHOLE supplied fragment. Fix rejected proposals or omit unsupported claims. Do not invent new citations.',
-                                    'rejected':result['rejected'][:10], 'usage':deepcopy(getattr(backend,'last_usage',None))}
+                                    'reasons':[r['reason'] for r in result['rejected'][:8]]}
         except (ValueError,TypeError,KeyError,IndexError) as error:
-            attempts.append({'attempt':number+1,'status':'invalid_response','error':str(error)})
+            attempts.append({'attempt':number+1,'status':'invalid_response','error':str(error),
+                             'usage':deepcopy(getattr(backend,'last_usage',None))})
             print(f'[MQM] group {request["center_group_index"]}: invalid response: {error}',flush=True)
             outgoing['correction']={'instruction':'Return only a valid JSON object with findings/observations arrays; exact in-fragment citations required.', 'error':str(error)}
     if best is not None:

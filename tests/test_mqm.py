@@ -175,9 +175,14 @@ def test_real_http_protocol_json_prompt_and_truncation(local_api):
     request=state['requests'][0]
     assert request['model']=='local-test' and request['temperature']==0
     assert 'untrusted DATA' in request['messages'][0]['content']
-    assert json.loads(request['messages'][1]['content'])['center_group_index']==0
+    wire=json.loads(request['messages'][1]['content'])
+    assert wire['source']['role']=='original' and wire['target']['role']=='translation'
+    assert wire['source']['sentences'][0]['ref']=='S0'
     state['finish_reason']='length'
     with pytest.raises(ValueError,match='incomplete'):backend.judge(make_request(report(),0))
+    backend.max_retries=0
+    failed=analyze(report(),backend,max_fragments=1)
+    assert failed['fragments'][0]['attempts'][0]['usage']['finish_reason']=='length'
 
 
 def test_bad_json_causes_partial_report_instead_of_false_success(local_api):
@@ -276,11 +281,12 @@ def test_requests_explicitly_separate_center_and_pairs():
     from src.processing.mqm.prompt import messages
     request=make_request(report(),1)
     wire=json.loads(messages(request)[1]['content'])
-    assert [g['group_index'] for g in wire['paired_groups'] if g['is_center']]==[1]
-    assert wire['paired_groups'][0]['source_sentences'][0]['index']==0
-    assert 'source' not in wire # text is sent once inside aligned groups
+    assert wire['source']['sentences'][0]['ref']=='S0'
+    assert wire['alignment_hypotheses'][1]=={'source':['S1'],'target':['T1']}
+    assert wire['source']['role']=='original'
+    assert wire['target']['role']=='translation'
     assert 'tokens' not in wire
-    assert 'tokens' in json.loads(messages(request,include_word_links=True)[1]['content'])
+    assert 'word_correspondence_hypotheses' in json.loads(messages(request,include_word_links=True)[1]['content'])
 
 
 def test_corrective_retry_discards_neighbor_error_without_weakening_validation():
@@ -292,7 +298,7 @@ def test_corrective_retry_discards_neighbor_error_without_weakening_validation()
     assert result['metrics']['unique_error_proposals']==1
     assert len(result['fragments'][0]['attempts'])==2
     correction=backend.judge.call_args_list[1].args[0]['correction']
-    assert 'outside context' in correction['rejected'][0]['reason']
+    assert 'outside context' in correction['reasons'][0]
 
 
 def test_local_bad_json_does_not_stop_remaining_groups():
@@ -376,7 +382,8 @@ def test_lean_prompt_is_smaller_and_preserves_aligned_texts():
     req=make_request(report(),0)
     lean=messages(req)[1]['content'];detailed=messages(req,include_word_links=True)[1]['content']
     assert len(lean)<len(detailed)
-    assert json.loads(lean)['paired_groups']==json.loads(detailed)['paired_groups']
+    assert json.loads(lean)['source']==json.loads(detailed)['source']
+    assert json.loads(lean)['target']==json.loads(detailed)['target']
 
 
 def test_fragment_limit_can_be_expanded_without_repeating_completed_calls():

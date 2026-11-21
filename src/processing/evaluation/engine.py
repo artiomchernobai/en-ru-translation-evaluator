@@ -7,10 +7,13 @@ from copy import deepcopy
 def evaluate_windows(windows, backend):
     output = deepcopy(windows)
     active = [w for w in output if w['source']['text'] and w['target']['text']]
-    results = backend.predict([{'src': w['source']['text'], 'mt': w['target']['text']} for w in active]) if active else []
-    if len(results) != len(active):
+    unique = {(w['source']['text'], w['target']['text']): None for w in active}
+    results = backend.predict([{'src': src, 'mt': mt} for src, mt in unique]) if unique else []
+    if len(results) != len(unique):
         raise ValueError('Backend result count does not match windows')
-    for window, result in zip(active, results):
+    lookup = dict(zip(unique, results))
+    for window in active:
+        result = deepcopy(lookup[(window['source']['text'], window['target']['text'])])
         if result.get('status') not in ('scored', 'too_long'):
             raise ValueError('Unknown evaluation status')
         if result['status'] == 'scored' and (not isinstance(result.get('score'), (int, float)) or not math.isfinite(result['score'])):
@@ -21,4 +24,5 @@ def evaluate_windows(windows, backend):
         if 'verdict' not in window:
             window['verdict'] = {'status': 'empty_side', 'score': None, 'scope': 'entire_window'}
     return {'schema_version': 1, 'model': deepcopy(backend.metadata),
+            'inference': {'input_windows': len(active), 'unique_model_inputs': len(unique)},
             'summary': dict(Counter(w['verdict']['status'] for w in output)), 'windows': output}

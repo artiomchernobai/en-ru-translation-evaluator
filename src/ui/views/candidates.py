@@ -10,6 +10,7 @@ from src.processing.analysis.io import load_settings
 from src.processing.evaluation.settings import read_settings
 from src.ui.candidate_model import candidate_payload
 from src.ui.components.candidate_review import show_candidate_review
+from src.processing.analysis.fragments import review_fragments
 
 
 def highlight(text, spans):
@@ -78,7 +79,7 @@ def render_candidates(root: Path):
         download_column.download_button('Скачать отчёт JSON', path.read_bytes(), file_name=path.name, mime='application/json')
         codes = sorted({s['code'] for c in data['candidates'] for s in c['signals']})
         selected_codes = filter_column.multiselect('Сигналы', codes, key='candidate_signals')
-        items = [c for c in data['candidates'] if not selected_codes or any(s['code'] in selected_codes for s in c['signals'])]
+        items = [c for c in review_fragments(data) if not selected_codes or any(s['code'] in selected_codes for s in c['signals'])]
         if not items:
             st.info('Кандидатов по выбранному фильтру нет. Это не доказывает отсутствие смысловых ошибок.')
             return
@@ -91,12 +92,12 @@ def render_candidates(root: Path):
                                   scope=(str(path), path.stat().st_mtime_ns), show_buttons=False)
         candidate = items[index]
         task = data['semantic_tasks'][candidate['group_index']]
-        st.caption(f"Контекст: {data.get('window_config', {}).get('strategy', 'fixed')} · группы {candidate['context_group_indices']}")
+        st.caption(f"Контекст: {data.get('window_config', {}).get('strategy', 'fixed')} · группы {candidate['context_group_indices']} · якоря {candidate['anchor_group_indices']}")
         names = ['Все сигналы'] + list(dict.fromkeys(s['code'] for s in candidate['signals']))
         selected = highlight_column.selectbox('Подсветка основания', names, key='candidate_highlight')
         signals = [s for s in candidate['signals'] if selected == 'Все сигналы' or s['code'] == selected]
         with st.expander('Основания и значение приоритета'):
-            st.caption('Приоритет — сумма весов эвристик с ограничением 100, не вероятность ошибки.')
+            st.caption('Приоритет группы — сумма весов эвристик с ограничением 100. Для объединённого окна берётся максимум приоритетов его якорей, а не повторная сумма сигналов. Это не вероятность ошибки.')
             for signal in signals:
                 st.write(f"{signal['code']}: {signal['message']}")
         fragment_navigation(items, selected=index, key='candidate_index',

@@ -8,7 +8,7 @@ export default function(component){
  const focus=[];
  for(const side of ['source','target']){
   const pane=document.createElement('section'),heading=document.createElement('div'),text=document.createElement('div');
-  pane.className='candidate-pane';pane.setAttribute('aria-label',side==='source'?'Оригинал кандидатов':'Перевод кандидатов');
+  pane.className='candidate-pane';pane.setAttribute('aria-label',side==='source'?'Оригинал':'Перевод');
   heading.className='candidate-heading';heading.textContent=data.panes[side].document+(data.panes[side].missing_center?' · у выбранной группы нет текста на этой стороне':'');
   text.className='candidate-text';text.dataset.side=side;text.tabIndex=0;
   if(data.panes[side].missing_center){
@@ -22,6 +22,8 @@ export default function(component){
     const span=document.createElement('span');span.className='candidate-piece'+(part.suspect?' suspect':'')+(part.review_area?' review-area':'')+(part.active?' active':'');span.textContent=part.text;
     if(part.active)span.title='Фрагмент, отмеченный выбранным сигналом; требует проверки';
     else if(part.review_area)span.title='Область проверки: точные слова возможной ошибки не установлены';
+    if(part.title)span.title=part.title;
+    if(part.marker){span.dataset.error=part.pick;span.dataset.marker=part.marker;if(part.severity)span.dataset.severity=part.severity;}
     if(part.pick!==null){
      span.setAttribute('role','button');span.tabIndex=0;span.dataset.candidate=part.pick;
      span.onclick=()=>setTriggerValue('pick',{identity:data.identity,id:part.pick});
