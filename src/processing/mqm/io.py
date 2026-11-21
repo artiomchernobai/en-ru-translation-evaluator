@@ -13,14 +13,14 @@ from .engine import analyze
 def read_settings(root):
     path=Path(root)/'data/mqm_settings.json'
     settings=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision','max_retries'}
+    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision','max_retries','include_word_links','max_fragments','min_priority'}
     if not isinstance(settings,dict) or set(settings)-allowed:raise ValueError('Unsupported MQM settings')
     return settings
 
 
 def configured_judge(settings):
     backend=LocalMQMBackend(model=settings.get('model',''),base_url=settings.get('base_url','http://127.0.0.1:1234/v1'),
-                            timeout=settings.get('timeout',120),max_tokens=settings.get('max_tokens',2048),json_mode=settings.get('json_mode',True),max_retries=settings.get('max_retries',1))
+                            timeout=settings.get('timeout',120),max_tokens=settings.get('max_tokens',2048),json_mode=settings.get('json_mode',True),max_retries=settings.get('max_retries',1),include_word_links=settings.get('include_word_links',False))
     backend.metadata['revision']=settings.get('revision','unspecified')
     return backend
 
@@ -38,7 +38,7 @@ def atomic_json(path, result):
         if temporary:temporary.unlink(missing_ok=True)
 
 
-def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None):
+def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0):
     candidate_path,output_path=Path(candidate_path),Path(output_path)
     if candidate_path.resolve()==output_path.resolve():raise ValueError('MQM output must not overwrite candidates')
     payload=candidate_path.read_bytes()
@@ -53,7 +53,7 @@ def analyze_file(candidate_path, output_path, *, backend, scope='candidates', re
         report['inputs']={'candidates':{'path':str(candidate_path),'sha256':hashlib.sha256(payload).hexdigest()}}
         report['updated_at']=datetime.now(timezone.utc).isoformat()
         atomic_json(output_path,report)
-    result=analyze(data,backend,scope=scope,previous=previous,progress=save)
+    result=analyze(data,backend,scope=scope,previous=previous,progress=save,max_fragments=max_fragments,min_priority=min_priority)
     print(f'[MQM] {result["status"]}; {output_path}',flush=True)
     return result
 

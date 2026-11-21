@@ -28,6 +28,9 @@ def render_mqm(root: Path):
             timeout=st.number_input('Ожидание ответа, секунд',min_value=1,max_value=3600,value=int(settings.get('timeout',120)))
             tokens=st.number_input('Максимум токенов ответа',min_value=128,max_value=32768,value=int(settings.get('max_tokens',2048)))
             json_mode=st.checkbox('Запрашивать режим JSON у сервера',value=bool(settings.get('json_mode',True)))
+            limit=st.number_input('Максимум фрагментов за запуск (0 — все)',min_value=0,value=int(settings.get('max_fragments',0)))
+            priority=st.number_input('Минимальный приоритет кандидата',min_value=0,max_value=100,value=int(settings.get('min_priority',0)))
+            links=st.checkbox('Передавать подробные связи слов (увеличивает запрос)',value=bool(settings.get('include_word_links',False)))
             retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
             resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
             st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
@@ -36,7 +39,7 @@ def render_mqm(root: Path):
                 try:
                     LocalMQMBackend(model=model,base_url=url,timeout=timeout,max_tokens=int(tokens),json_mode=json_mode)
                     atomic_json(root/'data/mqm_settings.json',{'model':model,'base_url':url,'revision':revision,'scope':scope,
-                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries)})
+                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries),'include_word_links':links,'max_fragments':int(limit),'min_priority':int(priority)})
                     st.success('Настройки сохранены')
                 except ValueError as error:st.error(str(error))
     current=st.session_state.get('ui_job')

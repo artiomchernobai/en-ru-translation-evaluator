@@ -1,6 +1,7 @@
 """OpenAI-compatible local judge (LM Studio, Ollama, llama.cpp). No ML imports."""
 import json
 import os
+import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -10,7 +11,7 @@ from .errors import MQMRequestError
 
 class LocalMQMBackend:
     def __init__(self, *, model, base_url='http://127.0.0.1:1234/v1', timeout=120, max_tokens=2048,
-                 json_mode=True, api_key_env='MQM_API_KEY', max_retries=1):
+                 json_mode=True, api_key_env='MQM_API_KEY', max_retries=1, include_word_links=False):
         url=urlsplit(base_url)
         if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.query or url.fragment:
             raise ValueError('MQM base URL must be HTTP(S) without embedded credentials/query')
@@ -20,15 +21,18 @@ class LocalMQMBackend:
             raise ValueError('Invalid MQM timeout or output token limit')
         if type(max_retries) is not int or not 0 <= max_retries <= 2:raise ValueError('max_retries must be 0..2')
         self.max_retries=max_retries
+        self.include_word_links=bool(include_word_links)
         self.url=base_url.rstrip('/')+'/chat/completions'
         self.model,self.timeout,self.max_tokens,self.json_mode=model.strip(),timeout,max_tokens,bool(json_mode)
         self.api_key_env=api_key_env
         self.metadata={'name':self.model,'base_url':base_url.rstrip('/'),'prompt_version':PROMPT_VERSION,
-                       'temperature':0,'max_retries':max_retries,'max_output_tokens':max_tokens,'json_mode':self.json_mode,
+                       'temperature':0,'include_word_links':self.include_word_links,'max_retries':max_retries,'max_output_tokens':max_tokens,'json_mode':self.json_mode,
                        'assessment':'automated_reference_free_mqm_proposals'}
 
     def judge(self, request):
-        body={'model':self.model,'messages':messages(request),'temperature':0,'max_tokens':self.max_tokens,'stream':False}
+        started=time.perf_counter()
+        self.last_usage=None
+        body={'model':self.model,'messages':messages(request,include_word_links=self.include_word_links),'temperature':0,'max_tokens':self.max_tokens,'stream':False}
         if self.json_mode:body['response_format']={'type':'json_object'}
         headers={'Content-Type':'application/json'}
         token=os.environ.get(self.api_key_env)
@@ -38,6 +42,8 @@ class LocalMQMBackend:
                 payload=response.read(4*1024*1024+1)
             if len(payload)>4*1024*1024:raise ValueError('MQM response exceeds size limit')
             answer=json.loads(payload)
+            self.last_usage={k:v for k,v in (answer.get('usage') or {}).items() if k in ('prompt_tokens','completion_tokens','total_tokens') and type(v) is int}
+            self.last_usage['elapsed_seconds']=round(time.perf_counter()-started,3)
             choice=answer['choices'][0]
             if choice.get('finish_reason') not in (None,'stop'):
                 raise ValueError('Model response is incomplete (output/context limit or refusal)')
@@ -61,7 +67,7 @@ class LocalMQMBackend:
             if (error.code==400 and 'response_format' in body
                     and any(k in detail.lower() for k in ('response_format','json_object'))):
                 fallback=type(self)(model=self.model,base_url=self.metadata['base_url'],timeout=self.timeout,
-                                    max_tokens=self.max_tokens,json_mode=False,api_key_env=self.api_key_env,max_retries=self.max_retries)
+                                    max_tokens=self.max_tokens,json_mode=False,api_key_env=self.api_key_env,max_retries=self.max_retries,include_word_links=self.include_word_links)
                 return fallback.judge(request)
             context_error=error.code in (400,413,422) and any(k in detail.lower() for k in ('context','token','too long','too large'))
             raise MQMRequestError(f'MQM server HTTP {error.code}: {detail or error.reason}',fatal=not context_error) from error

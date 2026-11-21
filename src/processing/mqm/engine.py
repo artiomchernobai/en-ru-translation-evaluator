@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+import time
 from copy import deepcopy
 from .contracts import validate_candidates, make_request, validate_judgment
 from .metrics import summarize, DEFAULT_WEIGHTS, fragment_metrics
@@ -14,14 +15,17 @@ def fingerprint(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,allow_nan=False).encode('utf-8')).hexdigest()
 
 
-def analyze(data, backend, *, scope='candidates', weights=None, previous=None, progress=None):
+def analyze(data, backend, *, scope='candidates', weights=None, previous=None, progress=None, max_fragments=0, min_priority=0):
     validate_candidates(data)
     if scope not in ('candidates','all'):raise ValueError('MQM scope must be candidates or all')
     weights=dict(DEFAULT_WEIGHTS if weights is None else weights)
     if set(weights)!=set(DEFAULT_WEIGHTS) or any(type(n) not in (int,float) or not math.isfinite(n) or n<=0 for n in weights.values()):
         raise ValueError('MQM weights must contain positive finite minor/major/critical values')
+    if type(max_fragments) is not int or max_fragments<0 or type(min_priority) is not int or not 0<=min_priority<=100:
+        raise ValueError('Invalid fragment limit or minimum priority')
     candidate_map={c['group_index']:c for c in data['candidates']}
-    indices=[c['group_index'] for c in data['candidates']] if scope=='candidates' else list(range(len(data['semantic_tasks'])))
+    indices=[c['group_index'] for c in data['candidates'] if c['priority']>=min_priority] if scope=='candidates' else list(range(len(data['semantic_tasks'])))
+    if max_fragments:indices=indices[:max_fragments]
     run_id=fingerprint({'input':data,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION})
     cache={}
     if isinstance(previous,dict) and previous.get('run_fingerprint')==run_id and isinstance(previous.get('fragments'),list):
@@ -31,12 +35,14 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
             'source':deepcopy(data['source']),'target':deepcopy(data['target']),
             'window_config':deepcopy(data.get('window_config',{})),
             'model':deepcopy(backend.metadata),'scope':scope,'run_fingerprint':run_id,
+            'selection':{'max_fragments':max_fragments,'min_priority':min_priority},
             'status':'running','fragments':[],'findings':[],'metrics':{}}
     def update(status):
         report['status']=status
         report.update(summarize(data,report['fragments'],weights))
         if progress:progress(report)
     for position,index in enumerate(indices):
+        started=time.perf_counter()
         request=make_request(data,index)
         request_hash=fingerprint(request)
         cached=cache.get(request_hash)
@@ -67,6 +73,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
                 fragment.update(judge_fragment(data,request,backend))
             except (ValueError,RuntimeError,TypeError,KeyError,IndexError) as error:
                 fragment.update(status='failed',error=str(error),fatal=isinstance(error,RuntimeError) and getattr(error,'fatal',True))
+        fragment['elapsed_seconds']=round(time.perf_counter()-started,3)
         fragment['metrics']=fragment_metrics(data,fragment,weights)
         report['fragments'].append(fragment)
         print(f'[MQM] {position+1}/{len(indices)} group {index}: {fragment["status"]}',flush=True)

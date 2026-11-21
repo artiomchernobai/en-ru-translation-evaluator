@@ -18,6 +18,6 @@ def stage_mqm(root: Path, docs: list[str], max_size: int) -> None:
     backend=configured_judge(settings)
     partial=False
     for source,output in pairs:
-        result=analyze_file(source,output,backend=backend,scope=settings.get('scope','candidates'),resume=settings.get('resume',True),window_strategy=strategy)
+        result=analyze_file(source,output,backend=backend,scope=settings.get('scope','candidates'),resume=settings.get('resume',True),window_strategy=strategy,max_fragments=settings.get('max_fragments',0),min_priority=settings.get('min_priority',0))
         partial=partial or result['status']!='complete'
     if partial:raise RuntimeError('MQM завершён частично; результаты сохранены. Проверьте сервер/цитаты и повторите этап.')
