@@ -131,6 +131,9 @@ def validate_judgment(raw, data, request):
         for item in items:
             try:
                 if not isinstance(item,dict): raise ValueError('Finding must be an object')
+                original_category=item.get('category')
+                aliases={'Mistranslation':'Accuracy/Mistranslation','Omission':'Accuracy/Omission','Addition':'Accuracy/Addition'}
+                if name=='findings' and original_category in aliases:item={**item,'category':aliases[original_category]}
                 if name=='findings' and (item.get('category') not in CATEGORIES or item.get('severity') not in SEVERITIES):
                     raise ValueError('Unknown MQM category or severity')
                 original_kind=item.get('kind')
@@ -146,10 +149,9 @@ def validate_judgment(raw, data, request):
                 if name=='findings':
                     if not spans['source'] and category!='Accuracy/Addition': raise ValueError('Source evidence required')
                     if not spans['target'] and category!='Accuracy/Omission': raise ValueError('Target evidence required')
-                if not any(s['sentence_index'] in request[side]['central_sentence_indices'] for side in spans for s in spans[side]):
-                    raise ValueError('Finding concerns only neighboring context, not the center')
                 record={key:item[key] for key in (('category','severity') if name=='findings' else ('kind',))}
                 if name=='observations' and original_kind!=item['kind']:record['model_kind']=original_kind
+                if name=='findings' and original_category!=item['category']:record['model_category']=original_category
                 record.update(explanation=item['explanation'], source_spans=spans['source'],target_spans=spans['target'],
                               status='needs_review',citation_validation='passed',semantic_validation='model_only')
                 if isinstance(item.get('suggestion'),str):record['suggestion']=item['suggestion']
@@ -157,3 +159,29 @@ def validate_judgment(raw, data, request):
             except (ValueError,TypeError,KeyError,AttributeError,IndexError) as error:
                 rejected.append({'section':name,'reason':str(error),'proposal':item})
     return {'findings':accepted,'observations':notes,'rejected':rejected}
+
+
+def attach_corpus(data, corpus):
+    """Use canonical token tables/links after proving identity with candidate windows."""
+    from copy import deepcopy
+    if corpus.get('schema_version')!=2 or corpus.get('word_alignment_status')!='included':
+        raise ValueError('Пересоздайте корпус этапом corpus: требуется версия 2 со связями SimAlign')
+    if any(corpus[side+'_document']!=data[side+'_document'] or
+           corpus['documents'][side]!=data[side] for side in ('source','target')):
+        raise ValueError('Corpus and candidate document/token tables differ')
+    if len(corpus['segments'])!=len(data['semantic_tasks']):raise ValueError('Corpus and candidate groups differ')
+    method=corpus['selected_word_method']
+    if method!=data['selected_word_method']:raise ValueError('Corpus SimAlign method differs')
+    for i,segment in enumerate(corpus['segments']):
+        center=data['semantic_tasks'][i]['window']['center_alignment']
+        if segment['segment_id']!=i or segment['vecalign_cost']!=center['cost'] or any(segment[side]['sentence_indices']!=center[side+'_indices'] for side in ('source','target')):
+            raise ValueError('Corpus and candidate alignment membership differs')
+    result=deepcopy(data)
+    result['source']=deepcopy(corpus['documents']['source']);result['target']=deepcopy(corpus['documents']['target'])
+    for task in result['semantic_tasks']:
+        for group in task['word_links']:
+            word=corpus['segments'][group['group_index']]['word_alignment']
+            links=word.get('methods',{}).get(method,[])
+            if group['links']!=links or group['status']!=word['status']:raise ValueError('Corpus and candidate token links differ')
+            group['links']=deepcopy(links)
+    return result

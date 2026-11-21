@@ -93,5 +93,6 @@ def stage_corpus(root: Path, docs: list[str], max_size: int) -> None:
             alignment_path=check_file(folder(root, "aligned") / f"{SOURCE}_{target}.align"),
             output=output,
             source_document=SOURCE, target_document=target,
+            word_alignment_path=check_file(folder(root, "word_alignment") / f"{SOURCE}_{target}.json"),
         )
         print(f"[Корпус] {SOURCE} + {target} -> {output.relative_to(root)}", flush=True)

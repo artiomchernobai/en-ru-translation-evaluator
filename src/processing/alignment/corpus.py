@@ -1,5 +1,9 @@
 
 import json
+import os
+import tempfile
+from copy import deepcopy
+from .words import _document, _fingerprint
 from src.processing.alignment.sentences import parse_alignment, parse_indices, validate_alignment
 
 from pathlib import Path
@@ -76,7 +80,8 @@ class CorpusBuilder:
         source_document: str,
         target_document: str,
         source_lang: str = "ru",
-        target_lang: str = "en"
+        target_lang: str = "en",
+        word_alignment_path: Path | None = None
     ):
 
         source_sentences = self.load_sentences(source_json)
@@ -86,6 +91,24 @@ class CorpusBuilder:
 
         validate_alignment(alignments, len(source_sentences), len(target_sentences))
 
+        documents = {}
+        for side, path, name, language in [('source',source_json,source_document,source_lang), ('target',target_json,target_document,target_lang)]:
+            raw = json.loads(Path(path).read_text(encoding='utf-8-sig'))
+            raw.setdefault('document',name)
+            raw.setdefault('language',language)
+            if raw['document']!=name or raw['language']!=language:
+                raise ValueError('Corpus document identity mismatch')
+            documents[side]=_document(raw)
+        words=None
+        if word_alignment_path is not None:
+            words=json.loads(Path(word_alignment_path).read_text(encoding='utf-8-sig'))
+            if words.get('sentence_alignment_fingerprint') != _fingerprint(alignments):
+                raise ValueError('Corpus and word alignment groups differ')
+            for side in documents:
+                if words[side]['fingerprint'] != documents[side]['fingerprint']:
+                    raise ValueError('Corpus and word alignment texts differ')
+            if len(words['blocks'])!=len(alignments):raise ValueError('Corpus block count differs')
+            documents={side:deepcopy(words[side]) for side in documents}
         segments = []
 
         for segment_id, alignment in enumerate(alignments):
@@ -107,18 +130,38 @@ class CorpusBuilder:
             else:
                 status = "aligned"
 
+            for label, selected in [('source',source),('target',target)]:
+                indices=alignment[label+'_indices']
+                selected['sentence_indices']=list(indices)
+                selected['token_ids']=[token_id for i in indices for token_id in documents[label]['sentences'][i]['token_ids']]
+            word=None
+            if words is not None:
+                block=words['blocks'][segment_id]
+                if any(block[side]['sentence_indices']!=alignment[side+'_indices'] or block[side]['token_ids']!=value['token_ids'] for side,value in [('source',source),('target',target)]):
+                    raise ValueError('Corpus token membership differs')
+                word=deepcopy(block['word_alignment'])
+                for links in word.get('methods',{}).values():
+                    if any(link['source_token_id'] not in source['token_ids'] or link['target_token_id'] not in target['token_ids'] for link in links):
+                        raise ValueError('Corpus token link outside group')
             segments.append({
                 "segment_id": segment_id,
                 "source": source,
                 "target": target,
                 "vecalign_cost": alignment["cost"],
                 "alignment_status": status,
-                "word_alignment": None,
+                "word_alignment": word,
                 "quality_score": None,
                 "errors": []
             })
 
         corpus = {
+            "schema_version": 2,
+            "documents": documents,
+            "selected_word_method": words['selected_method'] if words else None,
+            "sentence_alignment_fingerprint": _fingerprint(alignments),
+            "word_alignment_backend": deepcopy(words.get("backend")) if words else None,
+            "offsets": {"unit": "unicode_code_point", "end": "exclusive", "document_text": "normalized sentences joined with newline"},
+            "word_alignment_status": 'included' if words else 'not_computed',
             "corpus_id": f"{source_document}_{target_document}",
             "source_language": source_lang,
             "target_language": target_lang,
@@ -132,15 +175,18 @@ class CorpusBuilder:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with output_path.open("w", encoding="utf-8") as file:
-            json.dump(
-                corpus,
-                file,
-                ensure_ascii=False,
-                indent=4
-            )
+        temporary=None
+        try:
+            with tempfile.NamedTemporaryFile('w',encoding='utf-8',dir=output_path.parent,delete=False) as stream:
+                temporary=Path(stream.name)
+                json.dump(corpus,stream,ensure_ascii=False,indent=2,allow_nan=False)
+            os.replace(temporary,output_path)
+        finally:
+            if temporary:temporary.unlink(missing_ok=True)
 
         print(
             f"Corpus created: {output_path}\n"
             f"Segments: {len(segments)}"
         )
+
+        return corpus

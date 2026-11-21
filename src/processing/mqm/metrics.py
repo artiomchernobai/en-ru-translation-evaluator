@@ -34,7 +34,9 @@ def summarize(data, fragments, weights):
     for i,error in enumerate(errors):error['id']=f'error-{i}'
     processed=[f for f in fragments if f['status'] in ('completed','partial_invalid')]
     complete=[f for f in fragments if f['status']=='completed']
-    indices={i for f in processed for i in f['source_sentence_indices']}
+    indices={i for f in processed for i in f.get('assessed_source_sentence_indices',f['source_sentence_indices'])}
+    covered_groups={i for f in processed for i in f.get('context_group_indices',[f['group_index']])}
+    complete_groups={i for f in complete for i in f.get('context_group_indices',[f['group_index']])}
     word_count=lambda text:len(re.findall(WORD_PATTERN,text,re.UNICODE))
     total_words=word_count(data['source']['text'])
     checked_words=sum(word_count(data['source']['sentences'][i]['normalized_text']) for i in indices)
@@ -46,10 +48,11 @@ def summarize(data, fragments, weights):
         'normalization':{'unit':'1000_source_words','word_pattern':WORD_PATTERN,'severity_weights':weights},
         'coverage':{'total_groups':len(data['semantic_tasks']),'requested_groups':len(fragments),
                     'analyzed_groups':len(processed),'fully_completed_groups':len(complete),'statuses':statuses,
-                    'group_fraction':len(processed)/len(data['semantic_tasks']) if data['semantic_tasks'] else None,
+                    'group_fraction':len(covered_groups)/len(data['semantic_tasks']) if data['semantic_tasks'] else None,
                     'source_word_fraction':checked_words/total_words if total_words else None,
-                    'entire_text_fully_analyzed':len(complete)==len(data['semantic_tasks'])},
-        'source_words':total_words,'reviewed_center_source_words':checked_words,
+                    'entire_text_fully_analyzed':len(complete_groups)==len(data['semantic_tasks']),
+                    'covered_groups':len(covered_groups),'fully_covered_groups':len(complete_groups)},
+        'source_words':total_words,'reviewed_fragment_source_words':checked_words,
         'unique_error_proposals':len(errors),'by_category':dict(Counter(e['category'] for e in errors)),
         'by_severity':dict(Counter(e['severity'] for e in errors)),
         'unique_observations':len(observations),'observations_by_kind':dict(Counter(o['kind'] for o in observations)),
@@ -58,9 +61,9 @@ def summarize(data, fragments, weights):
         'weighted_error_points':points,
         'observed_errors_per_1000_document_source_words':rate(len(errors),total_words),
         'observed_weighted_points_per_1000_document_source_words':rate(points,total_words),
-        'errors_per_1000_reviewed_center_source_words':rate(len(errors),checked_words),
+        'errors_per_1000_reviewed_fragment_source_words':rate(len(errors),checked_words),
         'mean_error_proposals_per_analyzed_group':len(errors)/len(processed) if processed else None,
-        'document_rates_are_exhaustive':len(complete)==len(data['semantic_tasks']),
+        'document_rates_are_exhaustive':len(complete_groups)==len(data['semantic_tasks']),
         'extrapolated_unreviewed_errors':None}}
 
 
@@ -69,8 +72,8 @@ def fragment_metrics(data, fragment, weights):
     for finding in fragment['findings']:
         key=error_key(finding)
         if key not in unique or weights[finding['severity']]>weights[unique[key]['severity']]:unique[key]=finding
-    count=sum(len(re.findall(WORD_PATTERN,data['source']['sentences'][i]['normalized_text'])) for i in fragment['source_sentence_indices'])
+    count=sum(len(re.findall(WORD_PATTERN,data['source']['sentences'][i]['normalized_text'])) for i in fragment.get('assessed_source_sentence_indices',fragment['source_sentence_indices']))
     return {'analyzed':fragment['status'] in ('completed','partial_invalid'),
-            'central_source_words':count,'unique_error_proposals':len(unique),
+            'fragment_source_words':count,'unique_error_proposals':len(unique),
             'weighted_error_points':sum(weights[f['severity']] for f in unique.values()),
             'by_category':dict(Counter(f['category'] for f in unique.values()))}
