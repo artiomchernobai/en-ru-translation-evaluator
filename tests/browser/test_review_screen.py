@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(os.environ.get('RUN_BROWSER_TESTS') != '1', reas
 
 
 @pytest.fixture
-def application(tmp_path):
+def application(tmp_path, request):
     from src.processing.alignment.words import WordAligner
     class Backend:
         metadata = {'name': 'browser-test'}
@@ -25,6 +25,8 @@ def application(tmp_path):
         return {'document': name, 'language': lang, 'sentences': [
             {'sentence_id': i, 'normalized_text': text} for i, text in enumerate(texts)]}
     src = doc('test-source', 'ru', ['Он читает книгу.', 'Он читает книгу.', '😀 Мир! <script>alert(1)</script>'])
+    if getattr(request, 'param', None) == 'one-sided':
+        src['sentences'][0]['normalized_text'] = 'Он не читает книгу.'
     tgt = doc('test-target', 'en', ['He reads books.', 'He reads books.', '😀 World! <script>alert(1)</script>'])
     data = WordAligner(Backend()).align(src, tgt, [
         {'source_indices': [i], 'target_indices': [i], 'cost': .2} for i in range(3)])
@@ -196,6 +198,33 @@ def test_candidate_evidence_highlighting_and_safe_text(application):
             playwright.expect(page.get_by_role('button', name='Кандидаты на проверку', exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
             assert not dialogs
+
+
+@pytest.mark.parametrize('application', ['one-sided'], indirect=True)
+def test_candidate_one_sided_evidence_and_highlight_change(application):
+    with playwright.sync_playwright() as p:
+        executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
+            page = browser.new_page(viewport={'width': 1600, 'height': 1000})
+            page.goto(application)
+            page.get_by_text('Кандидаты', exact=True).click()
+            source = page.locator('.candidate-text[data-side="source"]')
+            target = page.locator('.candidate-text[data-side="target"]')
+            playwright.expect(source.locator('.active').first).to_be_visible()
+            previous_focus = page.locator('.candidate-reader').evaluate('(el)=>el._focusKey')
+            selector = page.get_by_role('combobox', name='Подсветка основания', exact=True)
+            if selector.evaluate('(el)=>el.tagName') == 'SELECT':
+                selector.select_option(label='negation_mismatch')
+            else:
+                selector.click()
+                page.get_by_role('option', name='negation_mismatch', exact=True).click()
+            playwright.expect(source.locator('.active')).to_have_count(1)
+            playwright.expect(source.locator('.active')).to_have_text('не')
+            playwright.expect(target.locator('.active')).to_have_count(0)
+            assert ''.join(target.locator('.review-area').all_text_contents()) == 'He reads books.'
+            playwright.expect(target.locator('.candidate-location-note')).to_be_visible()
+            assert page.locator('.candidate-reader').evaluate('(el)=>el._focusKey') != previous_focus
+            assert not page.get_by_test_id('stException').count()
 
 
 def test_mqm_report_metrics_and_citations(application):
