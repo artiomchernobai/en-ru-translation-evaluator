@@ -103,7 +103,7 @@ def render_candidates(root: Path):
                             indicator=lambda c: f"№{c['group_index']} · приоритет {c['priority']}")
         payload = candidate_payload(data, candidate, items, signals, mode=view_mode,
                                     identity=f'{path}:{path.stat().st_mtime_ns}')
-        st.caption('Ярко — выбранное основание · голубой фон — контекст · приглушённые отметки — остальные кандидаты. Нажмите на отметку для выбора ближайшего кандидата текущего фильтра.')
+        st.caption('Ярко — фрагмент выбранного сигнала · пунктир — область проверки без точной локализации · голубой фон — контекст · приглушённые отметки — остальные кандидаты. Нажмите на отметку для выбора ближайшего кандидата текущего фильтра.')
         show_candidate_review(payload, ids=[item['id'] for item in items])
         with st.expander('Координаты, токены и основания'):
             st.json(signals)

@@ -257,6 +257,57 @@ def test_full_candidate_clicks_choose_eligible_nearest_candidate():
         assert all(p['pick']==current['id'] for r in payload['panes'][side]['sentences'] for p in r['pieces'] if p['suspect'])
 
 
+@pytest.mark.parametrize('mode', ['Фрагмент', 'Весь текст'])
+def test_one_sided_signal_keeps_other_side_visible_without_inventing_word_evidence(mode):
+    from src.ui.candidate_model import candidate_payload
+    words, comet = pair()
+    report = collect_candidates(words, comet)
+    current = next(c for c in report['candidates'] if c['group_index'] == 2)
+    signal = next(s for s in current['signals'] if s['code'] == 'negation_mismatch')
+    payload = candidate_payload(report, current, report['candidates'], [signal], mode=mode, identity='test')
+    source, target = (payload['panes'][side] for side in ('source', 'target'))
+    assert ''.join(p['text'] for r in source['sentences'] for p in r['pieces'] if p['active']) == 'не'
+    assert not any(p['active'] for r in target['sentences'] for p in r['pieces'])
+    assert ''.join(p['text'] for r in target['sentences'] for p in r['pieces'] if p['review_area']) == 'He came.'
+    assert target['has_review_area'] and not target['missing_center']
+    assert next(r['index'] for r in target['sentences'] if r['focus']) == 2
+
+
+def test_group_and_window_signals_mark_their_scope_without_claiming_exact_error_words():
+    from src.ui.candidate_model import candidate_payload
+    words, comet = pair()
+    report = collect_candidates(words, comet)
+    current = next(c for c in report['candidates'] if c['group_index'] == 2)
+    lexical = next(s for s in current['signals'] if s['code'] == 'negation_mismatch')
+    unavailable = {'code': 'word_alignment_unavailable', 'source_spans': [], 'target_spans': []}
+    payload = candidate_payload(report, current, report['candidates'], [lexical, unavailable], mode='Фрагмент', identity='test')
+    source = payload['panes']['source']['sentences']
+    assert {r['index'] for r in source if any(p['review_area'] for p in r['pieces'])} == {2}
+    assert any(p['active'] for r in source for p in r['pieces'])
+    window_signal = {**unavailable, 'code': 'low_comet_window',
+                     'source_spans': current['source_spans'], 'target_spans': current['target_spans']}
+    payload = candidate_payload(report, current, report['candidates'], [window_signal], mode='Весь текст', identity='test')
+    for side in ('source', 'target'):
+        rows = payload['panes'][side]['sentences']
+        assert {r['index'] for r in rows if any(p['review_area'] for p in r['pieces'])} == set(report['semantic_tasks'][2]['window'][side]['sentence_indices'])
+        assert not any(p['active'] for r in rows for p in r['pieces'])
+
+
+def test_empty_candidate_side_does_not_mark_neighbor_as_missing_translation():
+    from src.ui.candidate_model import candidate_payload
+    groups = [{'source_indices': [0], 'target_indices': [], 'cost': 0},
+              {'source_indices': [1], 'target_indices': [0], 'cost': .3}]
+    words, comet = pair(['Пропущено.', 'Дальше.'], ['Next.'], groups)
+    report = collect_candidates(words, comet)
+    current = next(c for c in report['candidates'] if c['group_index'] == 0)
+    gap = next(s for s in current['signals'] if s['code'] == 'sentence_gap')
+    payload = candidate_payload(report, current, report['candidates'], [gap], mode='Фрагмент', identity='test')
+    target = payload['panes']['target']
+    assert target['missing_center']
+    assert not target['has_review_area']
+    assert not any(p['active'] or p['review_area'] for r in target['sentences'] for p in r['pieces'])
+
+
 def test_candidate_component_callback_updates_dropdown_and_rejects_stale_events():
     from streamlit.testing.v1 import AppTest
     script='''
