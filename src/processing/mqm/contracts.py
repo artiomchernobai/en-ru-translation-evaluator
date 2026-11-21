@@ -83,6 +83,12 @@ def make_request(data, group_index):
                         'tokens':[{'token_id':t['token_id'], 'sentence_index':t['sentence_index'],
                                    'text':t['text'], 'start':t['sentence_char_start'], 'end':t['sentence_char_end']}
                                   for t in data[side]['tokens'] if t['sentence_index'] in window[side]['sentence_indices']]}
+    result['paired_groups'] = [
+        {'group_index':g['group_index'], 'is_center':g['group_index']==group_index,
+         'source_sentences':[s for s in window['source']['sentences'] if s['index'] in g['source_indices']],
+         'target_sentences':[s for s in window['target']['sentences'] if s['index'] in g['target_indices']],
+         'has_gap':not g['source_indices'] or not g['target_indices']}
+        for g in window['alignments']]
     return result
 
 
