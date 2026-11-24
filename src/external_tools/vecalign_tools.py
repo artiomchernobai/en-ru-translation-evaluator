@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 
-DEFAULT_DELETION_PERCENTILE = 0.2
+DEFAULT_DELETION_PERCENTILE = 0.1
 
 
 def validate_deletion_percentile(value: float) -> float:

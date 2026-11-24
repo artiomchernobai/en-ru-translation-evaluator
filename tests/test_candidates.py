@@ -149,14 +149,14 @@ def test_files_write_provenance_and_preserve_result_on_failure(tmp_path):
     with pytest.raises(ValueError, match='overwrite'): collect_files(wp,cp,wp)
 
 
-def test_main_standalone_does_not_load_models(monkeypatch):
+def test_main_standalone_uses_shared_runner(monkeypatch):
     from src.processing.pipeline import cli
-    from src.processing.analysis import stages
-    run = Mock()
-    monkeypatch.setattr(stages,'stage_candidates',run)
-    monkeypatch.setattr(cli,'SentenceSegmenter',Mock(side_effect=AssertionError('no segmentation')))
+    run=Mock()
+    monkeypatch.setattr(cli,'run_stage',run)
     cli.main(['--stage','candidates'])
-    run.assert_called_once_with(cli.BASE_DIR,list(cli.DOCUMENTS),3)
+    from src.processing.pipeline.settings import DEFAULTS
+    run.assert_called_once_with(cli.ROOT,'candidates',DEFAULTS['documents'],None,None)
+
 
 
 def test_ui_highlighting_escapes_book_markup():

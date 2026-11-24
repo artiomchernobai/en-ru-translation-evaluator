@@ -16,7 +16,7 @@ def fingerprint(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,allow_nan=False).encode('utf-8')).hexdigest()
 
 
-def analyze(data, backend, *, scope='candidates', weights=None, previous=None, progress=None, max_fragments=0, min_priority=0):
+def analyze(data, backend, *, scope='candidates', weights=None, previous=None, progress=None, max_fragments=0, min_priority=0, group_indices=None):
     validate_candidates(data)
     if scope not in ('candidates','all'):raise ValueError('MQM scope must be candidates or all')
     weights=dict(DEFAULT_WEIGHTS if weights is None else weights)
@@ -26,6 +26,10 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
         raise ValueError('Invalid fragment limit or minimum priority')
     candidate_map={c['group_index']:c for c in data['candidates']}
     units=review_fragments(data,scope=scope,min_priority=min_priority)
+    if group_indices is not None:
+        if not isinstance(group_indices,list) or any(type(i) is not int or i<0 for i in group_indices):raise ValueError('Invalid selected groups')
+        units=[u for u in units if set(u['anchor_group_indices']).intersection(group_indices)]
+        if not units:raise ValueError('Selected candidate is absent from this report')
     if max_fragments:units=units[:max_fragments]
     semantic_input={k:v for k,v in data.items() if k not in ('created_at','inputs','review_fragments')}
     run_id=fingerprint({'input':semantic_input,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION})
@@ -37,7 +41,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
             'source':deepcopy(data['source']),'target':deepcopy(data['target']),
             'window_config':deepcopy(data.get('window_config',{})),
             'model':deepcopy(backend.metadata),'scope':scope,'assessment_unit':'entire_fragment','anchor_role':'navigation_only','run_fingerprint':run_id,
-            'selection':{'max_fragments':max_fragments,'min_priority':min_priority},
+            'selection':{'max_fragments':max_fragments,'min_priority':min_priority,'group_indices':group_indices},
             'status':'running','fragments':[],'findings':[],'metrics':{}}
     def update(status):
         report['status']=status

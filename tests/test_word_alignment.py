@@ -165,12 +165,7 @@ def test_stage_and_main_write_each_pair_and_reuse_backend(tmp_path, monkeypatch)
     factory.assert_called_once()
     for name in TARGETS:
         assert (folder(tmp_path, 'word_alignment') / f'{SOURCE}_{name}.json').is_file()
-    monkeypatch.setattr(processing_main, 'NORMALIZED_DIR', folder(tmp_path, 'normalized'))
-    monkeypatch.setattr(processing_main, 'ALIGNED_DIR', folder(tmp_path, 'aligned'))
-    monkeypatch.setattr(processing_main, 'WORD_ALIGNMENT_DIR', folder(tmp_path, 'word_alignment'))
-    monkeypatch.setattr(processing_main, 'create_directories', Mock())
-    monkeypatch.setattr(processing_main, 'SentenceSegmenter', Mock(side_effect=AssertionError('must not segment')))
-    processing_main.main(['--stage', 'word_align'])
+    processing_main.main(['--root',str(tmp_path),'--stage','word_align'])
     assert len(backend.calls) == 4
     from src.ui.jobs import write_json, read_status
     from src.ui.worker import run_job
@@ -195,6 +190,8 @@ def test_simalign_adapter_checks_limit_before_inference():
     backend._aligner = aligner
     with pytest.raises(BlockTooLongError): backend.align_tokens(['a'] * 4, ['b'])
     aligner.get_word_aligns.assert_not_called()
+    aligner.get_similarity.return_value=__import__('numpy').array([[.9]])
+    aligner.get_word_aligns.side_effect=lambda a,b: (aligner.get_similarity(None,None),{'itermax':[(0,0)]})[1]
     backend.align_tokens(['a'], ['b'])
     aligner.get_word_aligns.assert_called_once_with(['a'], ['b'])
 

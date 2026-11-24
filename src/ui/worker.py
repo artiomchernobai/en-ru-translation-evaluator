@@ -25,8 +25,13 @@ def run_job(request_file: Path) -> int:
     write_json(status_path, status)
     print(f"Задача {job_id} запущена. Проект: {root}", flush=True)
     try:
-        run_stage(root, request["stage"], request["documents"], int(request["max_size"]),
-                  del_percentile_frac=request.get("del_percentile_frac", DEFAULT_DELETION_PERCENTILE))
+        if request.get('selection'):
+            from src.processing.mqm.stages import analyze_candidate
+            selected=request['selection']
+            analyze_candidate(root,selected['group_index'],selected['target'],strategy=selected.get('strategy'))
+        else:
+            run_stage(root, request['stage'], request['documents'], int(request['max_size']),
+                      del_percentile_frac=request.get('del_percentile_frac', DEFAULT_DELETION_PERCENTILE))
     except Exception:
         print("\nОШИБКА:", flush=True)
         traceback.print_exc()

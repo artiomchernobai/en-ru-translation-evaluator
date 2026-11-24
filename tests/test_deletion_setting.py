@@ -48,7 +48,7 @@ def test_real_worker_alignment_receives_request_setting(tmp_path, monkeypatch, l
         directory=tmp_path/'data'/category;directory.mkdir(parents=True)
         for doc in ['original-rus','glenny-translation-en']:(directory/f'{doc}.{suffix}').write_text('x\n')
     script=tmp_path/'fake align.py'
-    expected=.2 if legacy else .1
+    expected=.1
     script.write_text(f"import sys\nassert sys.argv[sys.argv.index('--del_percentile_frac')+1] == '{expected}'\nprint('[0]:[0]:0.1')\n")
     monkeypatch.setenv('EXTERNAL_TOOLS_BACKEND','native')
     monkeypatch.setenv('VECALIGN_PYTHON',sys.executable)
@@ -79,7 +79,7 @@ def test_interface_submits_chosen_penalty(stage):
     with patch('src.ui.jobs.start_job',return_value={'id':'ui-setting-test','stage':stage,'process':process}) as start:
         app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'src/ui/app.py'), default_timeout=10).run()
         assert not app.exception
-        app.number_input(key='del_percentile_frac').set_value(0.1).run()
+        assert not any(n.key=='del_percentile_frac' for n in app.number_input)
         app.button(key='stage_align' if stage=='align' else 'all').click().run()
         assert not app.exception
         assert start.call_args.args[1]==stage

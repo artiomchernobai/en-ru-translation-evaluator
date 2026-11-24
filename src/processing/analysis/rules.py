@@ -106,6 +106,6 @@ def lexical_signals(words, block, glossary):
             spans[side] = [locate(doc, t['sentence_index'], t['sentence_char_start'], t['sentence_char_end']) for t in selected]
         if spans['source'] or spans['target']:
             add('unlinked_content', 'Содержательные токены без связей SimAlign; это не доказательство пропуска.', spans['source'], spans['target'], 10)
-    else:
+    elif word['status'] == 'skipped_too_long':
         add('word_alignment_unavailable', 'Выравнивание слов для группы не вычислено.', [], [], 5)
     return signals

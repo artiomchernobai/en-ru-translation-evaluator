@@ -258,8 +258,7 @@ def test_candidate_mode_change_preserves_other_settings(tmp_path):
     assert not app.exception
     # Merely opening the page must not persist a mode override.
     assert 'window_strategy' not in json.loads(settings_path.read_text())
-    app.selectbox(key='candidate_strategy').select('adaptive').run()
-    assert not app.exception
+    assert not any(s.key=='candidate_strategy' for s in app.selectbox)
     settings=json.loads(settings_path.read_text())
-    assert settings['window_strategy']=='adaptive'
+    assert 'window_strategy' not in settings
     assert settings['low_quantile']==.2 and settings['glossary']==[]

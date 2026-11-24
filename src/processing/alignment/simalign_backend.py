@@ -7,12 +7,15 @@ from .words import BlockTooLongError
 
 
 class SimAlignBackend:
-    def __init__(self, model: str = "bert", *, device: str = "cpu", layer: int = 8):
+    def __init__(self, model: str = "bert", *, device: str = "cpu", layer: int = 8, min_similarity: float = .55, min_margin: float = .02):
         if not model or not isinstance(model, str):
             raise ValueError("SimAlign model must be a model name or local path")
         if type(layer) is not int or layer < 0:
             raise ValueError("SimAlign layer must be a nonnegative integer")
+        if any(type(v) not in (float,int) or not 0<=v<=1 for v in (min_similarity,min_margin)): raise ValueError('Invalid similarity thresholds')
         self.model, self.device, self.layer = model, device, layer
+        self.min_similarity, self.min_margin = min_similarity, min_margin
+        self.last_token_map = None
         self._aligner = None
 
     @property
@@ -23,7 +26,8 @@ class SimAlignBackend:
             installed_version = None
         return {"name": "SimAlign", "version": installed_version, "model": self.model,
                 "device": self.device, "layer": self.layer, "token_type": "word",
-                "matching_methods": ["inter", "mwmf", "itermax"], "confidence_scores": False,
+                "matching_methods": ["inter", "mwmf", "itermax"], "confidence_scores": False, "similarity_scores": True, "score_type": "cosine_similarity_not_probability",
+                "min_similarity": self.min_similarity, "min_margin": self.min_margin,
                 "resolved_model": getattr(self._aligner, 'model', None),
                 "model_revision": getattr(self._aligner.embed_loader.emb_model.config, '_commit_hash', None)
                 if self._aligner is not None else None}
@@ -58,4 +62,33 @@ class SimAlignBackend:
                                 truncation=False, return_attention_mask=False)['input_ids']
             if len(encoded) > limit:
                 raise BlockTooLongError(f"{side} block needs {len(encoded)} model tokens; limit is {limit}")
-        return aligner.get_word_aligns(source, target)
+        # Capture the matrix from the same encoder pass; no second model inference.
+        original = aligner.get_similarity
+        captured = []
+        def similarity(a, b):
+            matrix = original(a, b)
+            captured.append(matrix)
+            return matrix
+        aligner.get_similarity = similarity
+        try:
+            raw = aligner.get_word_aligns(source, target)
+        finally:
+            aligner.get_similarity = original
+        if not captured: raise RuntimeError('SimAlign did not expose its similarity matrix')
+        import numpy as np
+        scores = np.asarray(captured[0])*2-1
+        if scores.shape != (len(source),len(target)) or not np.isfinite(scores).all():raise ValueError('Invalid SimAlign similarity matrix')
+        scores = np.clip(scores,-1,1)
+        self.last_scores = scores
+        def margin(i,j):
+            row = np.delete(scores[i],j)
+            column = np.delete(scores[:,j],i)
+            return max(float(scores[i,j])-(float(row.max()) if len(row) else -1),
+                       float(scores[i,j])-(float(column.max()) if len(column) else -1))
+        self.last_token_map = {}
+        for side, matrix in [('source',scores),('target',scores.T)]:
+            self.last_token_map[side] = [
+                [{'index':int(j),'similarity':float(row[j])} for j in np.argsort(-row)[:3]]
+                for row in matrix]
+        return {method:[(i,j) for i,j in pairs if scores[i,j]>=self.min_similarity and margin(i,j)>=self.min_margin]
+                for method,pairs in raw.items()}

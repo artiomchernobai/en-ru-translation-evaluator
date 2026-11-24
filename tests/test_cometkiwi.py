@@ -125,14 +125,14 @@ def test_stage_loads_once_for_all_pairs(tmp_path, monkeypatch):
     assert all(call.kwargs['backend'] is load.return_value for call in evaluate.call_args_list)
 
 
-def test_main_standalone_does_not_run_segmentation(monkeypatch):
+def test_main_standalone_uses_shared_runner(monkeypatch):
     from src.processing.pipeline import cli
-    from src.processing.evaluation import stages
-    run = Mock()
-    monkeypatch.setattr(stages, 'stage_cometkiwi', run)
-    monkeypatch.setattr(cli, 'SentenceSegmenter', Mock(side_effect=AssertionError('must not segment')))
-    cli.main(['--stage', 'cometkiwi'])
-    run.assert_called_once_with(cli.BASE_DIR, list(cli.DOCUMENTS), 3)
+    run=Mock()
+    monkeypatch.setattr(cli,'run_stage',run)
+    cli.main(['--stage','cometkiwi'])
+    from src.processing.pipeline.settings import DEFAULTS
+    run.assert_called_once_with(cli.ROOT,'cometkiwi',DEFAULTS['documents'],None,None)
+
 
 
 def test_quality_screen_displays_window_and_score(tmp_path):

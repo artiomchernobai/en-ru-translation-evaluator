@@ -10,6 +10,8 @@ def stage_segment(root: Path, docs: list[str], max_size: int) -> None:
         from src.processing.segmentation.postprocessor import SentencePostprocessor
     except ImportError as error:
         raise RuntimeError("Для сегментации нужны src.processing.segmentation.segmenter и postprocessor") from error
+    from src.processing.pipeline.settings import read_settings
+    options = read_settings(root)["segmentation"]
     segmenter = SentenceSegmenter()
     postprocessor = SentencePostprocessor()
     ru_processor = None
@@ -29,12 +31,11 @@ def stage_segment(root: Path, docs: list[str], max_size: int) -> None:
                 if not model_dir.exists():
                     raise FileNotFoundError(f"Модель RuBERT не найдена: {model_dir}")
                 classifier = RuBoundaryClassifier(
-                    model_dir, device="auto", batch_size=8,
-                    context_size=200, max_length=256, threshold=0.5,
+                    model_dir, device="auto", **options,
                 )
                 ru_processor = BoundaryAwareSegmenter(
                     ru_classifier=classifier,
-                    builder=BoundaryCandidateExtractor(context_size=200),
+                    builder=BoundaryCandidateExtractor(context_size=options["context_size"]),
                     segmenter=segmenter,
                     postprocessor=postprocessor,
                 )

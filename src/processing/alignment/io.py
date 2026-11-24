@@ -13,12 +13,15 @@ from .simalign_backend import SimAlignBackend
 from .words import WordAligner
 
 
-def configured_word_aligner() -> WordAligner:
+def configured_word_aligner(root=None) -> WordAligner:
     """Runtime configuration belongs to the caller, not the alignment algorithm."""
-    return WordAligner(SimAlignBackend(model=os.environ.get('SIMALIGN_MODEL', 'bert'),
-                       device=os.environ.get('SIMALIGN_DEVICE', 'cpu'),
-                       layer=int(os.environ.get('SIMALIGN_LAYER', '8'))),
-                       selected_method=os.environ.get('SIMALIGN_METHOD', 'itermax'))
+    from src.processing.pipeline.settings import read_settings
+    from src.processing.pipeline.config import ROOT
+    options=read_settings(root or ROOT)['word_alignment']
+    return WordAligner(SimAlignBackend(model=options['model'],device=options['device'],layer=options['layer'],
+                       min_similarity=options['min_similarity'],min_margin=options['min_margin']),
+                       selected_method=options['method'])
+
 
 
 def align_word_files(source_json: Path, target_json: Path, alignment_path: Path,

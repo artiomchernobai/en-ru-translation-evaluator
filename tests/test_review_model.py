@@ -83,7 +83,7 @@ def test_ui_all_pages_have_no_exceptions_and_no_window_titles():
     from streamlit.testing.v1 import AppTest
     app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'src/ui/app.py'), default_timeout=10).run()
     for page in ['Файлы','Проверка','Выравнивание','Настройки']:
-        app.radio(key='navigation').set_value(page).run()
+        app.button(key='nav_'+page).click().run()
         assert not app.exception
     assert all(h.value not in ('Окно A','Окно B') for h in app.subheader)
 

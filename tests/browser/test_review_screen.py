@@ -110,7 +110,7 @@ def test_click_links_themes_layout_and_safe_text(application):
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.on('dialog', lambda d: (dialogs.append(d.message), d.dismiss()))
             page.goto(application)
-            page.get_by_text('Проверка', exact=True).click()
+            page.get_by_role('button',name='Связи слов',exact=True).click()
             page.locator('.review').wait_for()
             page.wait_for_function("parseFloat(getComputedStyle(document.querySelector('h1')).fontSize) < 24")
             title = page.get_by_role('heading', name='Text Pipeline · Workbench').bounding_box()
@@ -158,7 +158,7 @@ def test_quality_window_navigation_and_scope(application):
         with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
             page = browser.new_page(viewport={'width': 1600, 'height': 1000})
             page.goto(application)
-            page.get_by_text('Оценка перевода', exact=True).click()
+            page.get_by_role('button',name='Оценки COMETKiwi',exact=True).click()
             playwright.expect(page.get_by_text('Оценка всего окна · выше — лучше', exact=True)).to_be_visible()
             playwright.expect(page.get_by_test_id('stMetricValue')).to_have_text('0.7500')
             assert page.get_by_role('button', name='Предыдущий фрагмент', exact=True).is_disabled()
@@ -179,7 +179,7 @@ def test_candidate_evidence_highlighting_and_safe_text(application):
             dialogs = []
             page.on('dialog', lambda d: (dialogs.append(d.message), d.dismiss()))
             page.goto(application)
-            page.get_by_text('Кандидаты', exact=True).click()
+            page.locator('.st-key-navigation_buttons').get_by_role('button',name='Кандидаты на проверку',exact=True).click()
             playwright.expect(page.get_by_role('heading', name='Кандидаты на проверку', exact=True)).to_be_visible()
             playwright.expect(page.locator('.candidate-piece.active').first).to_be_visible()
             page.get_by_role('button', name='Следующий фрагмент', exact=True).click()
@@ -202,7 +202,7 @@ def test_candidate_evidence_highlighting_and_safe_text(application):
             playwright.expect(page.get_by_text('2/3 · №1 · приоритет 10', exact=True)).to_be_visible()
             page.screenshot(path='/tmp/full-candidate-reader.png')
             playwright.expect(page.get_by_text('Записи Vecalign и контекст окна', exact=True)).to_be_visible()
-            playwright.expect(page.get_by_role('button', name='Кандидаты на проверку', exact=True)).to_have_count(1)
+            playwright.expect(page.locator('.st-key-right_actions').get_by_role('button', name='Кандидаты на проверку', exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
             assert not dialogs
 
@@ -214,7 +214,7 @@ def test_candidate_one_sided_evidence_and_highlight_change(application):
         with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
             page = browser.new_page(viewport={'width': 1600, 'height': 1000})
             page.goto(application)
-            page.get_by_text('Кандидаты', exact=True).click()
+            page.locator('.st-key-navigation_buttons').get_by_role('button',name='Кандидаты на проверку',exact=True).click()
             source = page.locator('.candidate-text[data-side="source"]')
             target = page.locator('.candidate-text[data-side="target"]')
             playwright.expect(source.locator('.active').first).to_be_visible()
@@ -240,7 +240,7 @@ def test_mqm_report_metrics_and_citations(application):
         with p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox']) as browser:
             page=browser.new_page(viewport={'width':1600,'height':1000})
             page.goto(application)
-            page.get_by_text('MQM',exact=True).click()
+            page.get_by_role('button',name='Отчёты MQM',exact=True).click()
             playwright.expect(page.get_by_role('heading',name='MQM · локальный анализ перевода',exact=True)).to_be_visible()
             playwright.expect(page.get_by_text('E1 · Accuracy/Mistranslation · minor: Тестовое замечание.',exact=True)).to_be_visible()
             playwright.expect(page.locator('.candidate-text[data-side="source"] [data-error]').first).to_have_text('книгу')
@@ -256,7 +256,7 @@ def test_mqm_full_text_click_opens_verdict_and_unreviewed_candidate(application)
         with p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox']) as browser:
             page=browser.new_page(viewport={'width':1600,'height':1000})
             page.goto(application)
-            page.get_by_text('MQM',exact=True).click()
+            page.get_by_role('button',name='Отчёты MQM',exact=True).click()
             mode=page.get_by_role('combobox',name='Область просмотра MQM',exact=True)
             if mode.evaluate('(el)=>el.tagName')=='SELECT':mode.select_option(label='Весь текст')
             else:

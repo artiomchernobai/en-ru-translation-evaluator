@@ -160,6 +160,19 @@ class WordAligner:
                         raise ValueError(f"Backend did not return {self.selected_method}")
                     word['methods'] = {name: _links(links, src_ids, tgt_ids) for name, links in raw.items()}
                     word['status'] = 'computed'
+                    scores = getattr(self.backend, 'last_scores', None)
+                    if scores is not None:
+                        for links in word['methods'].values():
+                            for link in links:
+                                link['similarity'] = float(scores[link['source_index'],link['target_index']])
+                    alternatives = getattr(self.backend, 'last_token_map', None)
+                    if alternatives is not None:
+                        word['token_map'] = {side: [
+                            {'token_id':tid, 'alternatives':[
+                                {'token_id':other_ids[a['index']], 'similarity':a['similarity']} for a in alternatives[side][i]]}
+                            for i,tid in enumerate(ids)]
+                            for side,ids,other_ids in [('source',src_ids,tgt_ids),('target',tgt_ids,src_ids)]}
+
             links = word['methods'].get(self.selected_method, [])
             partners = ({i: [] for i in src_ids}, {i: [] for i in tgt_ids})
             for link in links:
@@ -173,6 +186,28 @@ class WordAligner:
                         'sentence_unaligned' if status != 'aligned' else 'not_processed')
             for label, ids, mapping in (('source', src_ids, partners[0]), ('target', tgt_ids, partners[1])):
                 word[f'{label}_unlinked_token_ids'] = [i for i in ids if not mapping[i]] if word['status'] == 'computed' else []
+            word['coverage'] = {}
+            for side,doc,ids,mapping in [('source',source,src_ids,partners[0]),('target',target,tgt_ids,partners[1])]:
+                lexical = [i for i in ids if not doc['tokens'][i]['is_punctuation']]
+                linked = sum(bool(mapping[i]) for i in lexical)
+                accepted_scores={i:max((l.get('similarity',0) for l in links if l[side+'_token_id']==i),default=0) for i in lexical}
+                word['coverage'][side] = {'tokens':len(lexical),'linked':linked,
+                    'similarity_weighted_fraction':sum(accepted_scores.values())/len(lexical) if lexical and any('similarity' in l for l in links) else None,
+                    'fraction':linked/len(lexical) if lexical and word['status']=='computed' else None}
+            fractions = [v['fraction'] for v in word['coverage'].values()]
+            word['coverage']['symmetric'] = min(fractions) if all(v is not None for v in fractions) else None
+            word['coverage']['interpretation'] = 'lexical_alignment_coverage_not_translation_accuracy'
+            word.setdefault('token_map',{side:[{'token_id':i,'alternatives':[]} for i in ids] for side,ids in [('source',src_ids),('target',tgt_ids)]})
+            if 'token_map' in word:
+                for side,ids,mapping in [('source',src_ids,partners[0]),('target',tgt_ids,partners[1])]:
+                    document = source if side=='source' else target
+                    other = target if side=='source' else source
+                    for entry in word['token_map'][side]:
+                        token=document['tokens'][entry['token_id']]
+                        entry.update(text=token['text'],sentence_index=token['sentence_index'],sentence_id=token['sentence_id'])
+                        for alternative in entry['alternatives']: alternative['text']=other['tokens'][alternative['token_id']]['text']
+                        entry['matches'] = mapping[entry['token_id']]
+                        entry['status'] = ('linked' if entry['matches'] else 'no_reliable_match') if word['status']=='computed' else ('sentence_unaligned' if status!='aligned' else 'not_processed')
             blocks.append({"block_id": block_id, "sentence_alignment_status": status,
                            "sentence_alignment_review": "unreviewed", "vecalign_cost": group['cost'],
                            "source": sides[0], "target": sides[1], "word_alignment": word})

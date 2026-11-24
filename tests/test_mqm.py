@@ -193,13 +193,14 @@ def test_bad_json_causes_partial_report_instead_of_false_success(local_api):
     assert result['metrics']['coverage']['analyzed_groups']==0
 
 
-def test_main_standalone_does_not_run_segmentation(monkeypatch):
+def test_main_standalone_uses_shared_runner(monkeypatch):
     from src.processing.pipeline import cli
-    from src.processing.mqm import stages
-    run=Mock();monkeypatch.setattr(stages,'stage_mqm',run)
-    monkeypatch.setattr(cli,'SentenceSegmenter',Mock(side_effect=AssertionError('must not segment')))
+    run=Mock()
+    monkeypatch.setattr(cli,'run_stage',run)
     cli.main(['--stage','mqm'])
-    run.assert_called_once_with(cli.BASE_DIR,list(cli.DOCUMENTS),3)
+    from src.processing.pipeline.settings import DEFAULTS
+    run.assert_called_once_with(cli.ROOT,'mqm',DEFAULTS['documents'],None,None)
+
 
 
 def test_mqm_screen_displays_report_coverage(tmp_path):

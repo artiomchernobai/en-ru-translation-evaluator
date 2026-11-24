@@ -64,7 +64,7 @@ def stage_word_align(root: Path, docs: list[str], max_size: int) -> None:
     from src.processing.alignment.io import align_word_files, configured_word_aligner
     if SOURCE not in docs or not any(doc in TARGETS for doc in docs):
         raise ValueError("Для выравнивания слов выберите оригинал и хотя бы один перевод")
-    aligner = configured_word_aligner()
+    aligner = configured_word_aligner(root)
     for target in (doc for doc in TARGETS if doc in docs):
         align_word_files(
             check_file(folder(root, "normalized") / f"{SOURCE}.json"),

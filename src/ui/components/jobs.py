@@ -11,17 +11,13 @@ def render_controls(root: Path) -> None:
     with st.container(border=True, key="right_actions"):
         st.subheader("Этапы обработки")
         st.caption("Выберите документы и выполните отдельный этап или весь пайплайн.")
-        choices = st.multiselect(
-            "Документы", options=list(DOCUMENTS), default=list(DOCUMENTS), key="ui_docs",
-            format_func=lambda x: x.replace("-translation-en", "")
-        )
-        max_size = st.selectbox("Размер группы Vecalign", [2, 3, 4], index=0,
-                                help="Суммарное число сегментов с обеих сторон: 3 допускает 1:2 и 2:1; 4 — также 1:3, 3:1 и 2:2.")
-        del_percentile_frac = st.number_input(
-            "Штраф пропуска Vecalign (перцентиль)", min_value=0.0, max_value=1.0,
-            value=DEFAULT_DELETION_PERCENTILE, step=0.05, format="%.2f", key="del_percentile_frac",
-            help="По умолчанию 0.20. Меньше — пропуск дешевле и чаще выбирается вместо объединения. "
-                 "Слишком низкое значение может создать ложные пропуски. Применяется к выравниванию и полному запуску.")
+        from src.processing.pipeline.settings import read_settings
+        settings = read_settings(root)
+        choices = settings['documents']
+        st.session_state['ui_docs'] = choices
+        max_size = settings['vecalign']['max_size']
+        del_percentile_frac = settings['vecalign']['deletion_percentile']
+        st.caption(f"Vecalign: {max_size} · перцентиль {del_percentile_frac:.2f}. Параметры — на странице «Настройки».")
         current = st.session_state.get("ui_job")
         running = bool(current and current["process"].poll() is None)
         if current and not running and not current.get("completion_rendered"):
@@ -45,8 +41,8 @@ def render_controls(root: Path) -> None:
         st.caption("Ошибки модулей, пути и вывод внешних инструментов отображаются в нижнем журнале.")
 
 
-def submit(ROOT: Path, stage: str, docs: list[str], max_size: int,
-           del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> None:
+def submit(ROOT: Path, stage: str, docs: list[str], max_size: int | None = None,
+           del_percentile_frac: float | None = None) -> None:
     try:
         st.session_state["ui_job"] = job_manager.start_job(ROOT, stage, docs, max_size, del_percentile_frac=del_percentile_frac)
         st.session_state["ui_console_open"] = True
