@@ -10,7 +10,9 @@ def _tools(root: Path):
         from src.external_tools.vecalign_tools import ExternalToolsRunner
     except ImportError as error:
         raise RuntimeError("Не найден src.external_tools.vecalign_tools.ExternalToolsRunner") from error
-    return ExternalToolsRunner(project_dir=root)
+    from src.processing.pipeline.settings import read_settings
+    options = {k:v for k,v in read_settings(root)['external_tools'].items() if v}
+    return ExternalToolsRunner(project_dir=root, **options)
 
 
 def stage_overlap(root: Path, docs: list[str], max_size: int) -> None:
@@ -25,6 +27,7 @@ def stage_overlap(root: Path, docs: list[str], max_size: int) -> None:
 
 def stage_embed(root: Path, docs: list[str], max_size: int) -> None:
     tools = _tools(root)
+    tools.check_component('laser')
     for doc in docs:
         source = check_file(folder(root, "overlap_output") / f"{doc}.txt")
         dest = folder(root, "embeddings") / f"{doc}.emb"
@@ -42,6 +45,7 @@ def stage_align(root: Path, docs: list[str], max_size: int,
     if not targets:
         raise ValueError("Для Vecalign выберите хотя бы один английский перевод")
     tools = _tools(root)
+    tools.check_component('vecalign')
     for target in targets:
         dest = folder(root, "aligned") / f"{SOURCE}_{target}.align"
         dest.parent.mkdir(parents=True, exist_ok=True)

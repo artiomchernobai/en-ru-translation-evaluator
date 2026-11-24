@@ -56,7 +56,7 @@ def test_native_arguments_and_atomic_output(tmp_path, monkeypatch):
 
 
 def test_wsl_quotes_arguments(tmp_path):
-    runner=ExternalToolsRunner(tmp_path,backend='wsl',wsl_project_dir='/mnt/c/my project',vecalign_python='/tools/python')
+    runner=ExternalToolsRunner(tmp_path,backend='wsl',wsl_project_dir='/mnt/c/my project',vecalign_python='/tools/python',overlap_script='/tools/overlap.py')
     with patch('src.external_tools.vecalign_tools.subprocess.run') as run:
         runner.generate_overlaps(tmp_path/'a b.txt',tmp_path/'out.txt')
     command=run.call_args.args[0]
