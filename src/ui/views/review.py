@@ -22,7 +22,7 @@ def render_review(root: Path) -> None:
         return
     a,b,c=st.columns([5,2,2],gap='small')
     chosen=a.selectbox('Пара текстов',paths,format_func=lambda p:p.stem,label_visibility='collapsed',key='review_file')
-    method=b.selectbox('Метод связей',['itermax','inter','mwmf'],label_visibility='collapsed',key='review_method')
+    method=b.selectbox('Метод просмотра',['itermax','inter','mwmf'],label_visibility='collapsed',key='review_method')
     mode=c.selectbox('Область текста',['Весь текст','Фрагмент'],label_visibility='collapsed',key='review_mode')
     try:
         path=safe_file(root,str(chosen.relative_to(root)))
@@ -34,6 +34,22 @@ def render_review(root: Path) -> None:
         block_id=int(number)-1
         block=data['blocks'][block_id]
         b.caption(f"Фрагмент {number}/{len(data['blocks'])} · Vecalign {block['vecalign_cost']:.3f} · {block['word_alignment']['status']}")
+        with st.expander('Покрытие группы и альтернативы токенов'):
+            st.caption('Покрытие — доля лексических токенов с принятой связью; не оценка верности перевода. Пустая сторона не считается ошибкой вычисления.')
+            links=block['word_alignment'].get('methods',{}).get(method,[])
+            for side in ('source','target'):
+                ids=[i for i in block[side]['token_ids'] if not data[side]['tokens'][i]['is_punctuation']]
+                covered={l[side+'_token_id'] for l in links}
+                st.write(f"{side}: {sum(i in covered for i in ids)}/{len(ids)} токенов имеют связь")
+            from copy import deepcopy
+            token_map=deepcopy(block['word_alignment'].get('token_map',{}))
+            for side,entries in token_map.items():
+                other='target' if side=='source' else 'source'
+                for entry in entries:
+                    entry['matches']=[l[other+'_token_id'] for l in links if l[side+'_token_id']==entry['token_id']]
+                    if block['word_alignment']['status']=='computed':entry['status']='linked' if entry['matches'] else 'no_reliable_match'
+            st.caption(f"Просмотр: {method}. Для кандидатов сохранён метод {data['selected_method']}; измените его на странице настроек и пересчитайте этап.")
+            st.json(token_map)
         raw={}
         for side in ('source','target'):
             candidate=folder(root,'raw')/f"{data[side]['document_id']}.txt"

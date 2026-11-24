@@ -28,16 +28,29 @@ def configure_page() -> None:
     [data-testid="stRadio"] {margin-bottom:0.2rem;}
     [data-testid="stTextArea"] textarea {border-radius:4px;}
     [data-testid="stBottomBlockContainer"] {padding:0.35rem 1.25rem 0.65rem;}
+    .st-key-navigation_buttons button {background:transparent;border:0;box-shadow:none;}
+    .st-key-navigation_buttons button[kind="primary"] {color:var(--st-primary-color,#c83a52);border-bottom:2px solid var(--st-primary-color,#c83a52);border-radius:0;}
+    .st-key-navigation_buttons button:hover {background:color-mix(in srgb,var(--st-primary-color) 12%,transparent);}
     .st-key-right_actions {padding:0.5rem;}
     </style>
     """)
 
 
+def _navigate(page):
+    st.session_state['navigation']=page
+
+
 def main(root: Path = ROOT) -> None:
     configure_page()
     st.title("Text Pipeline · Workbench")
-    page = st.radio("Навигация", ["Файлы", "Проверка", "Выравнивание", "Оценка перевода", "Кандидаты", "MQM", "Настройки"],
-                    horizontal=True, label_visibility="collapsed", key="navigation")
+    pages = {'Файлы':'Файлы проекта', 'Проверка':'Связи слов', 'Выравнивание':'Группы предложений',
+             'Оценка перевода':'Оценки COMETKiwi', 'Кандидаты':'Кандидаты на проверку', 'MQM':'Отчёты MQM', 'Настройки':'Настройки'}
+    page = st.session_state.get('navigation','Файлы')
+    with st.container(key='navigation_buttons'):
+        columns=st.columns(len(pages))
+        for column,(key,label) in zip(columns,pages.items()):
+            column.button(label,key='nav_'+key,use_container_width=True,on_click=_navigate,args=(key,),
+                          type='primary' if key==page else 'secondary')
     central, sidebar = st.columns([5.3,1.7],gap="medium")
     with central:
         if page=="Файлы": render_files(root)

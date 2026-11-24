@@ -32,38 +32,15 @@ def highlight(text, spans):
     return '<div style="white-space:pre-wrap;overflow-wrap:anywhere;color:inherit">' + ''.join(parts) + '</div>'
 
 
-def save_strategy(root):
-    settings = load_settings(root)
-    strategy = st.session_state['candidate_strategy']
-    settings['window_strategy'] = strategy
-    path = root / 'data/candidate_settings.json'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding='utf-8')
-    st.session_state['candidate_strategy_saved'] = strategy
-
-
 def render_candidates(root: Path):
     st.subheader('Кандидаты на проверку')
-    st.caption('Кандидаты требуют проверки · нормализованный текст · MQM пока не запускался.')
-    view_column, mode_column, run_column = st.columns([2, 2, 1], vertical_alignment='bottom')
+    st.caption('Кандидаты требуют проверки · нормализованный текст · вердикты модели доступны в отчётах MQM.')
+    view_column, run_column = st.columns([3,1])
     view_mode = view_column.selectbox('Область просмотра', ['Фрагмент', 'Весь текст'], key='candidate_view_mode')
-    try:
-        settings = load_settings(root)
-        default_strategy = settings.get('window_strategy', read_settings(root).get('window_strategy', 'fixed'))
-        if st.session_state.get('candidate_strategy_saved') != default_strategy:
-            st.session_state['candidate_strategy'] = default_strategy
-            st.session_state['candidate_strategy_saved'] = default_strategy
-        mode_column.selectbox('Контекст кандидатов', ['fixed', 'adaptive'],
-                     index=1 if default_strategy == 'adaptive' else 0, key='candidate_strategy',
-                     on_change=save_strategy, args=(root,),
-                     format_func=lambda value: 'Адаптивный' if value == 'adaptive' else 'Фиксированный')
-    except (OSError, ValueError) as error:
-        st.error(f'Не удалось прочитать настройки: {error}')
-        return
     current = st.session_state.get('ui_job')
     running = bool(current and current['process'].poll() is None)
     if run_column.button('Найти кандидатов', key='candidate_run', disabled=running):
-        submit(root, 'candidates', st.session_state.get('ui_docs', list(DOCUMENTS)), 3)
+        submit(root, 'candidates', st.session_state.get('ui_docs', list(DOCUMENTS)))
     files = sorted(folder(root, 'review_candidates').glob('*.candidates*.json'))
     if not files:
         st.info('Сначала выполните SimAlign и COMETKiwi, затем поиск кандидатов.')
@@ -92,6 +69,13 @@ def render_candidates(root: Path):
                                   scope=(str(path), path.stat().st_mtime_ns), show_buttons=False)
         candidate = items[index]
         task = data['semantic_tasks'][candidate['group_index']]
+        if st.button('Оценить выбранный фрагмент через MQM',key='candidate_mqm',disabled=running):
+            from src.ui.jobs import start_job
+            st.session_state['ui_job']=start_job(root,'mqm',[data['source_document'],data['target_document']],
+                selection={'group_index':candidate['group_index'],'target':data['target_document'],'strategy':data.get('window_config',{}).get('strategy','fixed')})
+            st.session_state['ui_console_open']=True
+            st.rerun()
+        st.caption('MQM проверит весь контекст выбранного кандидата и сохранит отдельный отчёт; общая очередь не запускается.')
         st.caption(f"Контекст: {data.get('window_config', {}).get('strategy', 'fixed')} · группы {candidate['context_group_indices']} · якоря {candidate['anchor_group_indices']}")
         names = ['Все сигналы'] + list(dict.fromkeys(s['code'] for s in candidate['signals']))
         selected = highlight_column.selectbox('Подсветка основания', names, key='candidate_highlight')

@@ -15,38 +15,10 @@ def render_mqm(root: Path):
     st.subheader('MQM · локальный анализ перевода')
     st.caption('GEMBA-MQM-подобная схема: модель предлагает замечания, программа проверяет цитаты. '
                'Метрики описывают найденные предложения ошибок и фактический охват проверки.')
-    with st.expander('Локальная модель и параметры'):
-        try:settings=read_settings(root)
-        except (ValueError,OSError) as error:
-            st.error(str(error));return
-        with st.form('mqm_settings'):
-            url=st.text_input('OpenAI-совместимый адрес сервера',value=settings.get('base_url','http://127.0.0.1:1234/v1'),
-                              help='LM Studio: http://127.0.0.1:1234/v1 · Ollama: http://127.0.0.1:11434/v1')
-            model=st.text_input('Имя загруженной instruction-модели',value=settings.get('model',''))
-            revision=st.text_input('Версия/квантизация модели для воспроизводимости',value=settings.get('revision','unspecified'))
-            scope=st.selectbox('Область анализа',['candidates','all'],index=1 if settings.get('scope')=='all' else 0,
-                               format_func=lambda x:'Все группы текста' if x=='all' else 'Только кандидаты')
-            timeout=st.number_input('Ожидание ответа, секунд',min_value=1,max_value=3600,value=int(settings.get('timeout',120)))
-            tokens=st.number_input('Максимум токенов ответа',min_value=128,max_value=32768,value=int(settings.get('max_tokens',2048)))
-            json_mode=st.checkbox('Запрашивать режим JSON у сервера',value=bool(settings.get('json_mode',True)))
-            limit=st.number_input('Максимум фрагментов за запуск (0 — все)',min_value=0,value=int(settings.get('max_fragments',0)))
-            priority=st.number_input('Минимальный приоритет кандидата',min_value=0,max_value=100,value=int(settings.get('min_priority',0)))
-            links=st.checkbox('Передавать компактные связи подозрительных слов (до 48)',value=bool(settings.get('include_word_links',False)))
-            retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
-            resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
-            st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
-                       'не принимаются как успешный анализ. Изменив веса модели, укажите новую версию либо отключите продолжение.')
-            if st.form_submit_button('Сохранить настройки MQM'):
-                try:
-                    LocalMQMBackend(model=model,base_url=url,timeout=timeout,max_tokens=int(tokens),json_mode=json_mode)
-                    atomic_json(root/'data/mqm_settings.json',{'model':model,'base_url':url,'revision':revision,'scope':scope,
-                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries),'include_word_links':links,'max_fragments':int(limit),'min_priority':int(priority)})
-                    st.success('Настройки сохранены')
-                except ValueError as error:st.error(str(error))
     current=st.session_state.get('ui_job')
     running=bool(current and current['process'].poll() is None)
     if st.button('Анализировать перевод локальной моделью',key='mqm_run',disabled=running):
-        submit(root,'mqm',st.session_state.get('ui_docs',list(DOCUMENTS)),3)
+        submit(root,'mqm',st.session_state.get('ui_docs',list(DOCUMENTS)))
     paths=sorted(p for p in folder(root,'mqm_reports').glob('*.mqm*.json') if not p.name.endswith('.diagnostics.json'))
     if not paths:
         st.info('Сначала сформируйте кандидатов, настройте локальную модель и запустите MQM.');return
@@ -102,3 +74,34 @@ def render_mqm(root: Path):
         show_mqm_review(payload,picks)
         with st.expander('Входной фрагмент, вердикты и относительные координаты'):st.json(fragment)
     except (OSError,ValueError,KeyError,TypeError,IndexError) as error:st.error(f'Не удалось открыть MQM-отчёт: {error}')
+
+
+def render_mqm_settings(root: Path):
+    with st.expander('Локальная модель и параметры'):
+        try:settings=read_settings(root)
+        except (ValueError,OSError) as error:
+            st.error(str(error));return
+        with st.form('mqm_settings'):
+            url=st.text_input('OpenAI-совместимый адрес сервера',value=settings.get('base_url','http://127.0.0.1:1234/v1'),
+                              help='LM Studio: http://127.0.0.1:1234/v1 · Ollama: http://127.0.0.1:11434/v1')
+            model=st.text_input('Имя загруженной instruction-модели',value=settings.get('model',''))
+            revision=st.text_input('Версия/квантизация модели для воспроизводимости',value=settings.get('revision','unspecified'))
+            scope=st.selectbox('Область анализа',['candidates','all'],index=1 if settings.get('scope')=='all' else 0,
+                               format_func=lambda x:'Все группы текста' if x=='all' else 'Только кандидаты')
+            timeout=st.number_input('Ожидание ответа, секунд',min_value=1,max_value=3600,value=int(settings.get('timeout',120)))
+            tokens=st.number_input('Максимум токенов ответа',min_value=128,max_value=32768,value=int(settings.get('max_tokens',2048)))
+            json_mode=st.checkbox('Запрашивать режим JSON у сервера',value=bool(settings.get('json_mode',True)))
+            limit=st.number_input('Максимум фрагментов за запуск (0 — все)',min_value=0,value=int(settings.get('max_fragments',0)))
+            priority=st.number_input('Минимальный приоритет кандидата',min_value=0,max_value=100,value=int(settings.get('min_priority',0)))
+            links=st.checkbox('Передавать компактные связи подозрительных слов (до 48)',value=bool(settings.get('include_word_links',False)))
+            retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
+            resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
+            st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
+                       'не принимаются как успешный анализ. Изменив веса модели, укажите новую версию либо отключите продолжение.')
+            if st.form_submit_button('Сохранить настройки MQM'):
+                try:
+                    LocalMQMBackend(model=model,base_url=url,timeout=timeout,max_tokens=int(tokens),json_mode=json_mode)
+                    atomic_json(root/'data/mqm_settings.json',{'model':model,'base_url':url,'revision':revision,'scope':scope,
+                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries),'include_word_links':links,'max_fragments':int(limit),'min_priority':int(priority)})
+                    st.success('Настройки сохранены')
+                except ValueError as error:st.error(str(error))

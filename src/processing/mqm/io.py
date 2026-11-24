@@ -39,7 +39,7 @@ def atomic_json(path, result):
         if temporary:temporary.unlink(missing_ok=True)
 
 
-def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0, corpus_path=None):
+def analyze_file(candidate_path, output_path, *, backend, scope='candidates', resume=True, window_strategy=None, max_fragments=0, min_priority=0, corpus_path=None, group_indices=None):
     candidate_path,output_path=Path(candidate_path),Path(output_path)
     diagnostics_path=output_path.with_suffix('.diagnostics.json')
     inputs=[candidate_path]+([Path(corpus_path)] if corpus_path is not None else [])
@@ -65,7 +65,7 @@ def analyze_file(candidate_path, output_path, *, backend, scope='candidates', re
         report['updated_at']=datetime.now(timezone.utc).isoformat()
         atomic_json(diagnostics_path,diagnostics(report))
         atomic_json(output_path,compact_report(report))
-    result=analyze(data,backend,scope=scope,previous=previous,progress=save,max_fragments=max_fragments,min_priority=min_priority)
+    result=analyze(data,backend,scope=scope,previous=previous,progress=save,max_fragments=max_fragments,min_priority=min_priority,group_indices=group_indices)
     print(f'[MQM] {result["status"]}; {output_path}',flush=True)
     return compact_report(result)
 

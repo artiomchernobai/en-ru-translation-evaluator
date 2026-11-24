@@ -27,9 +27,13 @@ FUNCTIONS = {
 }
 
 
-def run_stage(root: Path, stage: str, docs: list[str], max_size: int,
-              del_percentile_frac: float = DEFAULT_DELETION_PERCENTILE) -> None:
-    del_percentile_frac = validate_deletion_percentile(del_percentile_frac)
+def run_stage(root: Path, stage: str, docs: list[str], max_size: int | None = None,
+              del_percentile_frac: float | None = None) -> None:
+    from .settings import read_settings
+    settings = read_settings(root)
+    max_size = settings["vecalign"]["max_size"] if max_size is None else max_size
+    if type(max_size) is not int or not 2 <= max_size <= 8: raise ValueError("Invalid Vecalign max_size")
+    del_percentile_frac = validate_deletion_percentile(settings["vecalign"]["deletion_percentile"] if del_percentile_frac is None else del_percentile_frac)
     if stage not in (*STAGES, "all"):
         raise ValueError(f"Неизвестный этап: {stage}")
     if not docs or any(doc not in DOCUMENTS for doc in docs):

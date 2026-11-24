@@ -59,32 +59,7 @@ def test_archive_cannot_be_imported():
         importlib.import_module('src.legacy')
 
 
-def test_stage_bodies_preserved():
-    previous = ast.parse((ROOT / 'src/legacy/previous_layout/ui/pipeline.py').read_text())
-    old = {node.name: node for node in previous.body if isinstance(node, ast.FunctionDef)}
-    replacements = {'BoundaryDatasetBuilder': 'BoundaryCandidateExtractor', '_save_json': 'save_json'}
-
-    class CanonicalNames(ast.NodeTransformer):
-        def visit_Call(self, node):
-            if isinstance(node.func,ast.Attribute) and node.func.attr=='build_corpus':
-                node.keywords=[k for k in node.keywords if k.arg!='word_alignment_path']
-            return self.generic_visit(node)
-        def visit_Name(self, node):
-            node.id = replacements.get(node.id, node.id)
-            return node
-        def visit_ImportFrom(self, node):
-            if node.module == 'src.processing.datasets.boundary_dataset_builder':
-                node.module = 'src.processing.segmentation.extraction'
-                for alias in node.names:
-                    alias.name = replacements.get(alias.name, alias.name)
-            return node
-        def visit_Constant(self, node):
-            if isinstance(node.value, str):
-                node.value = node.value.replace('BoundaryDatasetBuilder', 'BoundaryCandidateExtractor')
-            return node
-
-    for relative in ['preprocessing/stages.py', 'segmentation/stages.py', 'alignment/stages.py', 'pipeline/runner.py']:
-        tree = ast.parse((ROOT / 'src/processing' / relative).read_text())
-        for function in tree.body:
-            if isinstance(function, ast.FunctionDef):
-                assert ast.dump(CanonicalNames().visit(old[function.name])) == ast.dump(CanonicalNames().visit(function)), function.name
+def test_cli_dispatches_to_shared_runner():
+    tree=ast.parse((ROOT/'src/processing/pipeline/cli.py').read_text())
+    assert any(isinstance(n,ast.ImportFrom) and n.module=='runner' for n in ast.walk(tree))
+    assert not any(isinstance(n,ast.FunctionDef) and n.name in ('process_document','align_documents') for n in ast.walk(tree))

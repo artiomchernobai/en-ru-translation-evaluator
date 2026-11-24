@@ -19,13 +19,11 @@ python -m pip install -r src/processing/requirements-word-alignment.txt
 `mwmf`, `itermax`. Выбранные связи для токенов берутся из `itermax`.
 Первый запуск скачивает модель Hugging Face; последующие используют кэш.
 
-Необязательные переменные окружения:
-
-- `SIMALIGN_MODEL`: `bert`, `xlmr`, идентификатор Hugging Face или путь к локальной
-  модели с токенизатором;
-- `SIMALIGN_DEVICE`: `cpu` (по умолчанию), `cuda` или устройство PyTorch;
-- `SIMALIGN_METHOD`: `itermax`, `inter`, `mwmf`;
-- `SIMALIGN_LAYER`: номер слоя модели (по умолчанию `8`).
+Параметры задаются на странице «Настройки» и в `data/pipeline_settings.json`,
+раздел `word_alignment`: model, device, method, layer, min_similarity, min_margin.
+CLI и UI используют один загрузчик. Карта токенов, альтернативы, фильтрация связей
+и показатели покрытия описаны в [настройках пайплайна](../pipeline/README.md).
+Переменные SIMALIGN_* рабочего пайплайна заменены этим разделом конфигурации.
 
 Модель загружается один раз для всех пар в одном запуске этапа. Отдельный worker
 при следующем запуске загружает модель снова из кэша.
