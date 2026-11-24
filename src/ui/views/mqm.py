@@ -6,8 +6,9 @@ from src.processing.pipeline.config import DOCUMENTS, folder
 from src.processing.mqm.io import read_settings, atomic_json
 from src.processing.mqm.backend import LocalMQMBackend
 from src.ui.components.jobs import submit
-from src.ui.components.fragments import fragment_selector
-from src.ui.views.candidates import highlight
+from src.ui.components.fragments import fragment_selector, fragment_navigation
+from src.ui.mqm_model import load_review, review_items, mqm_payload
+from src.ui.components.mqm_review import show_mqm_review
 
 
 def render_mqm(root: Path):
@@ -30,7 +31,7 @@ def render_mqm(root: Path):
             json_mode=st.checkbox('Запрашивать режим JSON у сервера',value=bool(settings.get('json_mode',True)))
             limit=st.number_input('Максимум фрагментов за запуск (0 — все)',min_value=0,value=int(settings.get('max_fragments',0)))
             priority=st.number_input('Минимальный приоритет кандидата',min_value=0,max_value=100,value=int(settings.get('min_priority',0)))
-            links=st.checkbox('Передавать подробные связи слов (увеличивает запрос)',value=bool(settings.get('include_word_links',False)))
+            links=st.checkbox('Передавать компактные связи подозрительных слов (до 48)',value=bool(settings.get('include_word_links',False)))
             retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
             resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
             st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
@@ -46,44 +47,58 @@ def render_mqm(root: Path):
     running=bool(current and current['process'].poll() is None)
     if st.button('Анализировать перевод локальной моделью',key='mqm_run',disabled=running):
         submit(root,'mqm',st.session_state.get('ui_docs',list(DOCUMENTS)),3)
-    paths=sorted(folder(root,'mqm_reports').glob('*.mqm*.json'))
+    paths=sorted(p for p in folder(root,'mqm_reports').glob('*.mqm*.json') if not p.name.endswith('.diagnostics.json'))
     if not paths:
         st.info('Сначала сформируйте кандидатов, настройте локальную модель и запустите MQM.');return
-    path=st.selectbox('Отчёт оригинал — перевод',paths,format_func=lambda p:p.name,key='mqm_file')
+    file_column,mode_column,download_column=st.columns([3,2,1],vertical_alignment='bottom')
+    path=file_column.selectbox('Отчёт оригинал — перевод',paths,format_func=lambda p:p.name,key='mqm_file')
     try:
-        report=json.loads(path.read_text(encoding='utf-8'))
-        if report.get('schema_version')!=1:raise ValueError('Неподдерживаемый формат отчёта')
+        raw=json.loads(path.read_text(encoding='utf-8'))
+        if raw.get('schema_version') not in (1,2):raise ValueError('Неподдерживаемый формат отчёта')
+        report,documents,candidates,warning=load_review(raw,root)
+        if warning:st.warning(warning)
         metrics=report['metrics'];coverage=metrics['coverage']
         st.caption(f"{report['model']['name']} · статус {report['status']} · окон {coverage['analyzed_groups']} · охвачено {coverage.get('covered_groups',coverage['analyzed_groups'])}/{coverage['total_groups']} групп")
-        if report['status']!='complete':st.warning('Отчёт неполный. Проверьте ошибки фрагментов; повторный запуск продолжит работу.')
-        if not coverage['entire_text_fully_analyzed']:
-            st.warning('Проверена часть текста. Частота по всему документу — наблюдаемое число предложенных ошибок на объём текста, без экстраполяции.')
-        a,b,c=st.columns(3)
-        a.metric('Уникальных замечаний модели',metrics['unique_error_proposals'])
-        b.metric('Найдено на 1000 слов оригинала',f"{metrics['observed_errors_per_1000_document_source_words']:.2f}" if metrics['source_words'] else '—')
-        c.metric('Охват слов оригинала',f"{100*coverage['source_word_fraction']:.1f}%" if coverage['source_word_fraction'] is not None else '—')
-        st.download_button('Скачать MQM JSON',path.read_bytes(),file_name=path.name,mime='application/json')
-        with st.expander('Сводные метрики и ограничения'):st.json(metrics)
-        fragments=report['fragments']
+        download_column.download_button('Скачать MQM JSON',json.dumps(report,ensure_ascii=False,indent=2).encode('utf-8'),file_name=path.name,mime='application/json')
+        with st.expander('Сводные метрики и ограничения'):
+            if report['status']!='complete':st.warning('Отчёт неполный. Сохранённые замечания доступны; диагностика находится в отдельном файле.')
+            if not coverage['entire_text_fully_analyzed']:
+                st.warning('Проверена часть текста. Частота по документу описывает найденные предложения ошибок без экстраполяции.')
+            a,b,c=st.columns(3)
+            a.metric('Уникальных замечаний модели',metrics['unique_error_proposals'])
+            b.metric('Найдено на 1000 слов оригинала',f"{metrics['observed_errors_per_1000_document_source_words']:.2f}" if metrics['source_words'] else '—')
+            c.metric('Охват слов оригинала',f"{100*coverage['source_word_fraction']:.1f}%" if coverage['source_word_fraction'] is not None else '—')
+            st.json(metrics)
+        mode=mode_column.selectbox('Область просмотра MQM',['Фрагмент','Весь текст'],key='mqm_view_mode')
+        if mode=='Весь текст' and documents is None:
+            st.info('Для просмотра всего текста нужен корпус или файл кандидатов той же версии. Сохранённые фрагменты доступны автономно.')
+            mode='Фрагмент'
+        fragments=review_items(report,candidates) if mode=='Весь текст' else report['fragments']
         if not fragments:st.info('Нет выбранных фрагментов для анализа.');return
-        selected=fragment_selector(fragments,key='mqm_fragment',label='Отчёт фрагмента',identity=lambda f:f['group_index'],
-            format_func=lambda i:f"№{fragments[i]['group_index']} · {fragments[i]['status']}",
-            indicator=lambda f:f"№{f['group_index']} · {f['status']}",scope=(str(path),path.stat().st_mtime_ns))
+        fragment_column,finding_column=st.columns([2,2])
+        with fragment_column:
+            selected=fragment_selector(fragments,key='mqm_fragment',label='Отчёт фрагмента',identity=lambda f:f['fragment_id'],
+                format_func=lambda i:f"№{fragments[i]['group_index']} · {fragments[i]['status']}",
+                indicator=lambda f:f"№{f['group_index']} · {f['status']}",scope=(str(path),path.stat().st_mtime_ns,mode),show_buttons=False)
         fragment=fragments[selected]
         if fragment.get('error'):st.error(fragment['error'])
-        findings=fragment['findings']
-        if fragment['status']=='completed' and not findings:st.info('Модель не предложила подтверждаемых цитатами ошибок; это не гарантия правильности перевода.')
-        for finding in findings:
-            st.write(f"{finding['category']} · {finding['severity']}: {finding['explanation']}")
-        columns=st.columns(2)
-        for col,side,label in zip(columns,('source','target'),('Оригинал','Перевод')):
-            with col:
-                st.caption(label)
-                with st.container(height=320,border=True):
-                    for sentence in fragment.get('context',{}).get(side,[]):
-                        spans=[s for f in findings for s in f[side+'_spans'] if s['sentence_index']==sentence['index']]
-                        st.caption(f"[{sentence['index']}]")
-                        st.html(highlight(sentence['text'],spans))
-        with st.expander('Наблюдения, отклонённые цитаты и координаты'):
-            st.json({'observations':fragment['observations'],'rejected':fragment['rejected'],'findings':findings})
+        findings=fragment['findings'];records=findings+fragment['observations']
+        by_id={r['id']:r for r in records}
+        if st.session_state.get('mqm_selected_finding') not in ['__all__',*by_id]:
+            st.session_state['mqm_selected_finding']='__all__'
+        chosen=finding_column.selectbox('Замечание модели',['__all__',*by_id],key='mqm_selected_finding',
+            format_func=lambda x:'Все замечания фрагмента' if x=='__all__' else f"{by_id[x]['marker']} · {by_id[x].get('severity',by_id[x].get('kind'))} · {by_id[x].get('category','наблюдение')}")
+        fragment_navigation(fragments,selected=selected,key='mqm_fragment',
+                            indicator=lambda f:f"№{f['group_index']} · {f['status']} · якоря {f['anchor_group_indices']}")
+        if fragment['status']=='not_analyzed':st.info('Для этого подозрительного фрагмента вердикт модели пока отсутствует.')
+        elif fragment['status']=='completed' and not findings:st.info('Модель не предложила подтверждаемых цитатами ошибок; это не гарантия правильности перевода.')
+        shown=records if chosen=='__all__' else [by_id[chosen]]
+        with st.container(height=110 if len(shown)>2 else 'content',border=False):
+            for record in shown:
+                st.write(f"{record['marker']} · {record.get('category',record.get('kind'))} · {record.get('severity','наблюдение')}: {record['explanation']}")
+        st.caption('Приглушённые отметки — подозрительные фрагменты; яркие — выбранные замечания. Нажмите на отметку, чтобы открыть вердикт, маркер и серьёзность.')
+        payload,picks=mqm_payload(report,fragments,selected,documents=documents,candidates=candidates,mode=mode,
+                                  selected_finding=chosen,identity=f'{path}:{path.stat().st_mtime_ns}:{mode}')
+        show_mqm_review(payload,picks)
+        with st.expander('Входной фрагмент, вердикты и относительные координаты'):st.json(fragment)
     except (OSError,ValueError,KeyError,TypeError,IndexError) as error:st.error(f'Не удалось открыть MQM-отчёт: {error}')

@@ -45,8 +45,9 @@ class LocalMQMBackend:
             self.last_usage={k:v for k,v in (answer.get('usage') or {}).items() if k in ('prompt_tokens','completion_tokens','total_tokens') and type(v) is int}
             self.last_usage['elapsed_seconds']=round(time.perf_counter()-started,3)
             choice=answer['choices'][0]
+            self.last_usage['finish_reason']=choice.get('finish_reason')
             if choice.get('finish_reason') not in (None,'stop'):
-                raise ValueError('Model response is incomplete (output/context limit or refusal)')
+                raise ValueError(f'Model response is incomplete (finish_reason={choice.get("finish_reason")})')
             content=choice['message']['content']
             if not isinstance(content,str):raise ValueError('Model returned no JSON text')
             # Markdown fences are common with local instruction models; no prose/fuzzy repairs.
@@ -68,7 +69,8 @@ class LocalMQMBackend:
                     and any(k in detail.lower() for k in ('response_format','json_object'))):
                 fallback=type(self)(model=self.model,base_url=self.metadata['base_url'],timeout=self.timeout,
                                     max_tokens=self.max_tokens,json_mode=False,api_key_env=self.api_key_env,max_retries=self.max_retries,include_word_links=self.include_word_links)
-                return fallback.judge(request)
+                try:return fallback.judge(request)
+                finally:self.last_usage=getattr(fallback,'last_usage',None)
             context_error=error.code in (400,413,422) and any(k in detail.lower() for k in ('context','token','too long','too large'))
             raise MQMRequestError(f'MQM server HTTP {error.code}: {detail or error.reason}',fatal=not context_error) from error
         except (URLError,TimeoutError,OSError) as error:

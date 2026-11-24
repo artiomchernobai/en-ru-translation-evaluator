@@ -9,6 +9,7 @@ from .metrics import summarize, DEFAULT_WEIGHTS, fragment_metrics
 from .prompt import PROMPT_VERSION
 from .judging import judge_fragment
 from .errors import MQMRequestError
+from src.processing.analysis.fragments import review_fragments
 
 
 def fingerprint(value):
@@ -24,9 +25,10 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
     if type(max_fragments) is not int or max_fragments<0 or type(min_priority) is not int or not 0<=min_priority<=100:
         raise ValueError('Invalid fragment limit or minimum priority')
     candidate_map={c['group_index']:c for c in data['candidates']}
-    indices=[c['group_index'] for c in data['candidates'] if c['priority']>=min_priority] if scope=='candidates' else list(range(len(data['semantic_tasks'])))
-    if max_fragments:indices=indices[:max_fragments]
-    run_id=fingerprint({'input':data,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION})
+    units=review_fragments(data,scope=scope,min_priority=min_priority)
+    if max_fragments:units=units[:max_fragments]
+    semantic_input={k:v for k,v in data.items() if k not in ('created_at','inputs','review_fragments')}
+    run_id=fingerprint({'input':semantic_input,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION})
     cache={}
     if isinstance(previous,dict) and previous.get('run_fingerprint')==run_id and isinstance(previous.get('fragments'),list):
         cache={f['request_hash']:f for f in previous['fragments'] if isinstance(f,dict)
@@ -41,9 +43,11 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
         report['status']=status
         report.update(summarize(data,report['fragments'],weights))
         if progress:progress(report)
-    for position,index in enumerate(indices):
+    for position,unit in enumerate(units):
+        index=unit['group_index']
         started=time.perf_counter()
         request=make_request(data,index)
+        request['hints']=[{k:s[k] for k in ('code','message','source_spans','target_spans')} for s in unit['signals']]
         request_hash=fingerprint(request)
         cached=cache.get(request_hash)
         if cached:
@@ -75,16 +79,26 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
                 fragment.update(status='failed',error=str(error),fatal=isinstance(error,RuntimeError) and getattr(error,'fatal',True))
         fragment['assessed_source_sentence_indices']=[s['index'] for s in request['source']['sentences']]
         fragment['assessed_target_sentence_indices']=[s['index'] for s in request['target']['sentences']]
+        fragment.update(fragment_id=unit['fragment_id'],anchor_group_indices=unit['anchor_group_indices'],
+                        candidate_ids=unit['candidate_ids'],priority=unit['priority'],signals=deepcopy(request['hints']))
         fragment['elapsed_seconds']=round(time.perf_counter()-started,3)
         fragment['metrics']=fragment_metrics(data,fragment,weights)
         report['fragments'].append(fragment)
-        print(f'[MQM] {position+1}/{len(indices)} group {index}: {fragment["status"]}',flush=True)
+        print(f'[MQM] {position+1}/{len(units)} fragment {unit["fragment_id"]} anchors {unit["anchor_group_indices"]}: {fragment["status"]}',flush=True)
         update('running')
         if fragment.get('error'):print(f'[MQM] group {index}: {fragment["error"]}',flush=True)
         if fragment['status']=='failed' and fragment.get('fatal',False):
             # A server/model failure should not produce hundreds of identical failed calls.
-            for pending in indices[position+1:]:
+            for pending_unit in units[position+1:]:
+                pending=pending_unit['group_index']
+                pending_request=make_request(data,pending)
                 report['fragments'].append({'group_index':pending,'status':'not_run_after_failure',
+                                            'fragment_id':pending_unit['fragment_id'],
+                                            'anchor_group_indices':pending_unit['anchor_group_indices'],
+                                            'candidate_ids':pending_unit['candidate_ids'],
+                                            'signals':pending_unit['signals'],
+                                            'context_group_indices':pending_unit['context_group_indices'],
+                                            'context':{side:pending_request[side]['sentences'] for side in ('source','target')},
                                             'source_sentence_indices':data['semantic_tasks'][pending]['window']['center_alignment']['source_indices'],
                                             'target_sentence_indices':data['semantic_tasks'][pending]['window']['center_alignment']['target_indices'],
                                             'findings':[],'observations':[],'rejected':[]})

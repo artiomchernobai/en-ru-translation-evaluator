@@ -9,5 +9,9 @@
 .candidate-piece.review-area{background:color-mix(in srgb,#eeac46 35%,transparent);outline:1px dashed #a97525;border-radius:2px}
 .candidate-piece.active{background:#ffd24d;color:#161616;outline:1px solid #9c6a00;border-radius:2px}
 .candidate-location-note{font-size:12px;line-height:1.4;padding:4px 6px;margin-bottom:8px;border-left:3px solid #a97525}
+.candidate-piece[data-error]{background:color-mix(in srgb,#ec6a6a 22%,transparent);text-decoration:underline dotted #c64a4a}
+.candidate-piece[data-error].active{background:#ffd24d;color:#161616;outline:2px solid #9c6a00}
+.candidate-piece[data-severity="critical"]{border-bottom:3px solid #d52525}
+.candidate-piece[data-severity="major"]{border-bottom:2px solid #ce6a30}
 .candidate-piece.suspect:hover,.candidate-piece.suspect:focus-visible{outline:2px solid var(--st-primary-color);outline-offset:1px}
 @media(max-width:650px){.candidate-panes{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}

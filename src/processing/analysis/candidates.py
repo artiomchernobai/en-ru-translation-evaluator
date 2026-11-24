@@ -63,7 +63,7 @@ def collect_candidates(words, comet, *, low_quantile=.1, high_quantile=.9, gloss
                            'links': deepcopy(blocks[i]['word_alignment'].get('methods', {}).get(words['selected_method'], []))}
                           for i in window['group_indices']]})
     candidates.sort(key=lambda item: (-item['priority'], item['group_index']))
-    return {'schema_version': 1, 'analysis_version': 'candidate_rules_ru_en_v1',
+    result = {'schema_version': 1, 'analysis_version': 'candidate_rules_ru_en_v1',
             'semantic_analysis': 'not_run',
             'window_config': deepcopy(comet.get('window_config', {'strategy': 'fixed', 'radius': comet['radius']})), 'source_document': words['source']['document_id'],
             'target_document': words['target']['document_id'],
@@ -76,3 +76,9 @@ def collect_candidates(words, comet, *, low_quantile=.1, high_quantile=.9, gloss
                         'semantic_tasks': len(tasks), 'semantic_groups_checked': 0,
                         'signal_count': sum(len(c['signals']) for c in candidates)},
             'candidates': candidates, 'semantic_tasks': tasks}
+    from .fragments import review_fragments
+    result['review_fragments'] = [
+        {key: unit[key] for key in ('fragment_id', 'group_index', 'anchor_group_indices', 'candidate_ids', 'context_group_indices')}
+        for unit in review_fragments(result)]
+    result['summary']['review_fragments'] = len(result['review_fragments'])
+    return result

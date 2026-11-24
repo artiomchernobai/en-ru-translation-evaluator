@@ -102,8 +102,22 @@ def _spans(raw, side, data, request):
             span={'sentence_index':span[0],'quote':span[1]}
         if not isinstance(span,dict):raise ValueError('Citation must be an object with sentence_index and quote')
         index, quote = span.get('sentence_index'), span.get('quote')
-        if type(index) is not int or index not in allowed or not isinstance(quote,str) or not quote:
+        ref = span.get('ref')
+        if ref is not None:
+            prefix = 'S' if side == 'source' else 'T'
+            if not isinstance(ref, str) or not re.fullmatch(prefix+r'\d+', ref):
+                raise ValueError('Citation ref has the wrong source/target role')
+            index = int(ref[1:])
+        if not isinstance(quote,str) or not quote:
             raise ValueError('Citation missing or outside context')
+        resolved = False
+        if type(index) is not int or index not in allowed or quote not in data[side]['sentences'][index]['normalized_text']:
+            hits = [(i, m) for i in allowed for m in re.finditer(re.escape(quote), data[side]['sentences'][i]['normalized_text'])]
+            if len(hits) != 1:
+                if type(index) is not int or index not in allowed: raise ValueError('Citation missing or outside context')
+                raise ValueError('Quote is absent or ambiguous; explicit offsets required')
+            index = hits[0][0]
+            resolved = True
         text = data[side]['sentences'][index]['normalized_text']
         start,end = span.get('start'),span.get('end')
         if start is None and end is None:
@@ -119,6 +133,9 @@ def _spans(raw, side, data, request):
             if len(matches)!=1:raise ValueError('Quote is absent or ambiguous; valid offsets required')
             location=locate(data[side],index,*matches[0].span())
             location['offset_resolution']='unique_exact_quote'
+        if resolved:
+            location['index_resolution'] = 'unique_exact_quote_in_fragment'
+            location['model_reference'] = ref if ref is not None else span.get('sentence_index')
         result.append(location)
     return result
 

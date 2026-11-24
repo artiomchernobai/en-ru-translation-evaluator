@@ -20,7 +20,8 @@ def summarize(data, fragments, weights):
             if key not in unique:
                 unique[key]={**deepcopy(finding),'group_indices':[]}
             record=unique[key]
-            if fragment['group_index'] not in record['group_indices']:record['group_indices'].append(fragment['group_index'])
+            for anchor in fragment.get('anchor_group_indices',[fragment['group_index']]):
+                if anchor not in record['group_indices']:record['group_indices'].append(anchor)
             if rank[finding['severity']]>rank[record['severity']]:
                 record.update(severity=finding['severity'],explanation=finding['explanation'])
     notes={}
@@ -28,7 +29,8 @@ def summarize(data, fragments, weights):
         for observation in fragment.get('observations',[]):
             key=(observation['kind'], *[tuple(sorted((s['sentence_index'],s['start'],s['end']) for s in observation[side+'_spans'])) for side in ('source','target')])
             if key not in notes:notes[key]={**deepcopy(observation),'group_indices':[]}
-            if fragment['group_index'] not in notes[key]['group_indices']:notes[key]['group_indices'].append(fragment['group_index'])
+            for anchor in fragment.get('anchor_group_indices',[fragment['group_index']]):
+                if anchor not in notes[key]['group_indices']:notes[key]['group_indices'].append(anchor)
     observations=list(notes.values())
     errors=list(unique.values())
     for i,error in enumerate(errors):error['id']=f'error-{i}'
@@ -47,7 +49,9 @@ def summarize(data, fragments, weights):
         'assessment':'automated_proposals_require_human_review',
         'normalization':{'unit':'1000_source_words','word_pattern':WORD_PATTERN,'severity_weights':weights},
         'coverage':{'total_groups':len(data['semantic_tasks']),'requested_groups':len(fragments),
+                    'requested_fragments':len(fragments),'requested_anchors':sum(len(f.get('anchor_group_indices',[f['group_index']])) for f in fragments),
                     'analyzed_groups':len(processed),'fully_completed_groups':len(complete),'statuses':statuses,
+                    'analyzed_fragments':len(processed),'fully_completed_fragments':len(complete),
                     'group_fraction':len(covered_groups)/len(data['semantic_tasks']) if data['semantic_tasks'] else None,
                     'source_word_fraction':checked_words/total_words if total_words else None,
                     'entire_text_fully_analyzed':len(complete_groups)==len(data['semantic_tasks']),
@@ -63,6 +67,7 @@ def summarize(data, fragments, weights):
         'observed_weighted_points_per_1000_document_source_words':rate(points,total_words),
         'errors_per_1000_reviewed_fragment_source_words':rate(len(errors),checked_words),
         'mean_error_proposals_per_analyzed_group':len(errors)/len(processed) if processed else None,
+        'mean_error_proposals_per_analyzed_fragment':len(errors)/len(processed) if processed else None,
         'document_rates_are_exhaustive':len(complete_groups)==len(data['semantic_tasks']),
         'extrapolated_unreviewed_errors':None}}
 

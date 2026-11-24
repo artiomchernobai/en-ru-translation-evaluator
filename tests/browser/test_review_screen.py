@@ -1,5 +1,6 @@
 """Opt-in real browser regression: RUN_BROWSER_TESTS=1 pytest tests/browser -q."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -56,7 +57,13 @@ def application(tmp_path, request):
         def judge(self,request):
             return {'findings':[{'category':'Accuracy/Mistranslation','severity':'minor','explanation':'Тестовое замечание.',
                     'source_spans':[{'sentence_index':0,'quote':'книгу'}],'target_spans':[{'sentence_index':0,'quote':'books'}]}] if request['center_group_index']==0 else []}
-    mqm=analyze(candidates,MQMBrowserJudge())
+    mqm=analyze(candidates,MQMBrowserJudge(),max_fragments=1 if getattr(request,'param',None)=='mqm-partial' else 0)
+    from src.processing.mqm.reports import compact_report
+    corpus_path=tmp_path/'data/corpus/test.json';corpus_path.parent.mkdir(parents=True)
+    corpus_path.write_text(json.dumps({'documents':{side:data[side] for side in ('source','target')}}))
+    mqm['inputs']={kind:{'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+                   for kind,path in [('corpus',corpus_path),('candidates',candidate_output)]}
+    mqm=compact_report(mqm)
     mqm_path=tmp_path/'data/mqm_reports/test.mqm.json';mqm_path.parent.mkdir(parents=True)
     mqm_path.write_text(json.dumps(mqm),encoding='utf-8')
     for document in (src, tgt):
@@ -235,8 +242,35 @@ def test_mqm_report_metrics_and_citations(application):
             page.goto(application)
             page.get_by_text('MQM',exact=True).click()
             playwright.expect(page.get_by_role('heading',name='MQM · локальный анализ перевода',exact=True)).to_be_visible()
-            playwright.expect(page.get_by_text('Accuracy/Mistranslation · minor: Тестовое замечание.',exact=True)).to_be_visible()
-            playwright.expect(page.locator('mark').first).to_have_text('книгу')
+            playwright.expect(page.get_by_text('E1 · Accuracy/Mistranslation · minor: Тестовое замечание.',exact=True)).to_be_visible()
+            playwright.expect(page.locator('.candidate-text[data-side="source"] [data-error]').first).to_have_text('книгу')
             playwright.expect(page.get_by_role('button',name='MQM — анализ локальной моделью',exact=True)).to_have_count(1)
             assert not page.get_by_test_id('stException').count()
             page.screenshot(path='/tmp/mqm-report-view.png')
+
+
+@pytest.mark.parametrize('application', ['mqm-partial'], indirect=True)
+def test_mqm_full_text_click_opens_verdict_and_unreviewed_candidate(application):
+    with playwright.sync_playwright() as p:
+        executable=os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable,headless=True,args=['--no-sandbox']) as browser:
+            page=browser.new_page(viewport={'width':1600,'height':1000})
+            page.goto(application)
+            page.get_by_text('MQM',exact=True).click()
+            mode=page.get_by_role('combobox',name='Область просмотра MQM',exact=True)
+            if mode.evaluate('(el)=>el.tagName')=='SELECT':mode.select_option(label='Весь текст')
+            else:
+                mode.click();page.get_by_role('option',name='Весь текст',exact=True).click()
+            source=page.locator('.candidate-text[data-side="source"]')
+            third=source.locator('[data-sentence="2"] .suspect').first
+            playwright.expect(third).to_be_visible()
+            third.click()
+            playwright.expect(page.get_by_text('Для этого подозрительного фрагмента вердикт модели пока отсутствует.',exact=True)).to_be_visible()
+            source.locator('[data-error]').first.click()
+            playwright.expect(page.get_by_text('E1 · Accuracy/Mistranslation · minor: Тестовое замечание.',exact=True)).to_be_visible()
+            selection=page.get_by_role('combobox',name='Замечание модели',exact=True)
+            if selection.evaluate('(el)=>el.tagName')=='SELECT':
+                playwright.expect(selection).to_contain_text('E1')
+            else:
+                playwright.expect(selection).to_have_value('E1 · minor · Accuracy/Mistranslation')
+            assert not page.get_by_test_id('stException').count()
