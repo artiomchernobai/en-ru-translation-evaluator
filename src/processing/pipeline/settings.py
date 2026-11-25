@@ -7,6 +7,8 @@ from .config import DOCUMENTS
 DEFAULTS = {
     'documents': list(DOCUMENTS),
     'vecalign': {'max_size': 4, 'deletion_percentile': .1},
+    'external_tools': {'backend': '', 'laser_python': '', 'vecalign_python': '',
+                       'wsl_project_dir': '', 'vecalign_script': '', 'overlap_script': ''},
     'word_alignment': {'model': 'bert', 'device': 'cpu', 'layer': 8, 'method': 'itermax',
                        'min_similarity': .55, 'min_margin': .02},
     'segmentation': {'batch_size': 8, 'context_size': 200, 'max_length': 256, 'threshold': .5},
@@ -23,6 +25,9 @@ def read_settings(root):
             if not isinstance(value, dict) or set(value)-set(result[key]): raise ValueError(f'Unknown settings: {key}')
             result[key].update(value)
         else: result[key] = value
+    external=result['external_tools']
+    if any(not isinstance(v,str) for v in external.values()) or external['backend'] not in ('','native','wsl'):
+        raise ValueError('Invalid external tool settings')
     v,w,s = (result[k] for k in ('vecalign','word_alignment','segmentation'))
     if not result['documents'] or any(d not in DOCUMENTS for d in result['documents']): raise ValueError('Invalid documents')
     if type(v['max_size']) is not int or not 2 <= v['max_size'] <= 8: raise ValueError('Vecalign max_size must be 2..8')

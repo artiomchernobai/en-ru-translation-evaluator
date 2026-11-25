@@ -49,7 +49,7 @@ def test_real_worker_alignment_receives_request_setting(tmp_path, monkeypatch, l
         for doc in ['original-rus','glenny-translation-en']:(directory/f'{doc}.{suffix}').write_text('x\n')
     script=tmp_path/'fake align.py'
     expected=.1
-    script.write_text(f"import sys\nassert sys.argv[sys.argv.index('--del_percentile_frac')+1] == '{expected}'\nprint('[0]:[0]:0.1')\n")
+    script.write_text(f"import sys\nif '--help' in sys.argv: raise SystemExit(0)\nassert sys.argv[sys.argv.index('--del_percentile_frac')+1] == '{expected}'\nprint('[0]:[0]:0.1')\n")
     monkeypatch.setenv('EXTERNAL_TOOLS_BACKEND','native')
     monkeypatch.setenv('VECALIGN_PYTHON',sys.executable)
     monkeypatch.setenv('VECALIGN_SCRIPT',str(script))

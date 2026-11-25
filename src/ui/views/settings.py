@@ -83,6 +83,28 @@ def render_pipeline_settings(root):
                 read_settings(temporary)
             atomic_json(root/'data/pipeline_settings.json',settings)
             st.success('Сохранено для CLI и интерфейса')
+    with st.expander('Внешние инструменты: Vecalign и LASER'):
+        st.caption('Overlap формируется внутри приложения. Для выравнивания укажите окружение с установленным Vecalign. Для ML-зависимостей предпочтительно совместимое окружение Python 3.12 или WSL.')
+        with st.form('external_tools'):
+            e=settings['external_tools']
+            e['backend']=st.selectbox('Режим внешних инструментов',['','native','wsl'],index=['','native','wsl'].index(e['backend']),format_func=lambda v:v or 'Из окружения / native')
+            e['vecalign_python']=st.text_input('Python с Vecalign',value=e['vecalign_python'],help=r'Например D:\piton\.venv-align\Scripts\python.exe; в WSL — путь Linux.')
+            e['laser_python']=st.text_input('Python с laser_encoders',value=e['laser_python'])
+            e['wsl_project_dir']=st.text_input('Каталог проекта внутри WSL',value=e['wsl_project_dir'])
+            e['vecalign_script']=st.text_input('Скрипт Vecalign (для исходников без установленного пакета)',value=e['vecalign_script'])
+            e['overlap_script']=st.text_input('Внешний overlap.py (необязательно)',value=e['overlap_script'],help='Пустое поле использует VECALIGN_OVERLAP_SCRIPT, если она задана; иначе — встроенный генератор.')
+            if st.form_submit_button('Сохранить внешние инструменты'):
+                atomic_json(root/'data/pipeline_settings.json',settings)
+                st.success('Параметры внешних окружений сохранены')
+        st.caption('Проверка использует сохранённые настройки. Пустые поля наследуют переменные окружения; без них используется Python приложения (в WSL — python3).')
+        if st.button('Проверить доступность Vecalign и LASER'):
+            from src.processing.alignment.stages import _tools
+            tools=_tools(root)
+            for component in ('vecalign','laser'):
+                try:
+                    tools.check_component(component)
+                    st.success(f'{component}: доступен')
+                except RuntimeError as error:st.error(str(error))
     with st.expander('Отбор кандидатов'):
         from src.processing.analysis.io import load_settings
         from src.processing.evaluation.settings import read_settings as comet_settings

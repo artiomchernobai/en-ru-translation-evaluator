@@ -25,7 +25,8 @@ def validate_deletion_percentile(value: float) -> float:
 class ExternalToolsRunner:
     def __init__(self, project_dir: Path, *, backend: str | None = None,
                  laser_python: str | None = None, vecalign_python: str | None = None,
-                 wsl_project_dir: str | None = None):
+                 wsl_project_dir: str | None = None, vecalign_script: str | None = None,
+                 overlap_script: str | None = None):
         self.project_dir = Path(project_dir).resolve()
         self.backend = backend or os.environ.get('EXTERNAL_TOOLS_BACKEND', 'native')
         if self.backend not in {'native', 'wsl'}:
@@ -36,6 +37,8 @@ class ExternalToolsRunner:
         default_python = 'python3' if self.backend == 'wsl' else sys.executable
         self.laser_python = laser_python or os.environ.get('LASER_PYTHON', default_python)
         self.vecalign_python = vecalign_python or os.environ.get('VECALIGN_PYTHON', default_python)
+        self.vecalign_script = vecalign_script or os.environ.get('VECALIGN_SCRIPT')
+        self.overlap_script = overlap_script or os.environ.get('VECALIGN_OVERLAP_SCRIPT')
 
     def to_wsl_path(self, path: Path) -> str:
         relative = Path(path).resolve().relative_to(self.project_dir)
@@ -49,20 +52,44 @@ class ExternalToolsRunner:
             path = self.project_dir / path
         return self.to_wsl_path(path) if self.backend == 'wsl' else str(path.resolve())
 
-    def run_command(self, command: list[str], *, stdout=None):
+    def run_command(self, command: list[str], *, stdout=None, stderr=None):
         command = [str(arg) for arg in command]
         if self.backend == 'wsl':
             command = [os.environ.get('WSL_EXECUTABLE', 'wsl.exe'), 'bash', '-lc',
                        f'cd {shlex.quote(self.wsl_project_dir)} && {shlex.join(command)}']
         print('Executing:', shlex.join(command), flush=True)
-        return subprocess.run(command, cwd=self.project_dir, check=True, stdout=stdout)
+        return subprocess.run(command, cwd=self.project_dir, check=True, stdout=stdout, stderr=stderr)
 
     def _vecalign_entry(self, component: str) -> list[str]:
         # Upstream source checkouts expose scripts; packaged installations may expose modules.
-        script = os.environ.get('VECALIGN_SCRIPT' if component == 'vecalign' else 'VECALIGN_OVERLAP_SCRIPT')
+        script = self.vecalign_script if component == 'vecalign' else self.overlap_script
         return [self.vecalign_python, script] if script else [self.vecalign_python, '-m', f'vecalign.{component}']
 
+    def check_component(self, component: str) -> None:
+        if component not in {'vecalign', 'laser'}:
+            raise ValueError(f'Unknown external component: {component}')
+        python = self.vecalign_python if component == 'vecalign' else self.laser_python
+        # Use the actual entrypoint so source checkouts and packaged installs are both checked.
+        command = (self._vecalign_entry('vecalign') + ['--help'] if component == 'vecalign'
+                   else [python, '-c', 'import laser_encoders'])
+        try:
+            self.run_command(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except (OSError, subprocess.CalledProcessError) as error:
+            detail = getattr(error, 'stderr', b'') or str(error)
+            if isinstance(detail, bytes):
+                detail = detail.decode('utf-8', errors='replace')
+            raise RuntimeError(f'{component} недоступен через {python}. Настройте отдельный Python или WSL '
+                               f'на странице «Настройки → Внешние инструменты». Overlap не требует Vecalign.\n{detail[-2000:]}') from error
+
     def generate_overlaps(self, input_path: Path, output_path: Path, num_overlaps: int = 4):
+        if not self.overlap_script:
+            from src.processing.alignment.overlaps import write_overlaps
+            source, output = Path(input_path), Path(output_path)
+            if not source.is_absolute():
+                source = self.project_dir / source
+            if not output.is_absolute():
+                output = self.project_dir / output
+            return write_overlaps(source, output, num_overlaps)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         self.run_command(self._vecalign_entry('overlap') + [
             '-i', self._path(input_path), '-o', self._path(output_path), '-n', str(num_overlaps)])
