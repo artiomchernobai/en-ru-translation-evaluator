@@ -69,6 +69,7 @@ def render_pipeline_settings(root):
         w['layer']=st.number_input('Слой энкодера',min_value=0,value=w['layer'])
         w['min_similarity']=st.number_input('Минимальное сходство связи',min_value=0.,max_value=1.,value=float(w['min_similarity']),step=.05)
         w['min_margin']=st.number_input('Минимальный отрыв от альтернативы',min_value=0.,max_value=1.,value=float(w['min_margin']),step=.01)
+        w['secondary_drop']=st.number_input('Допустимое падение сходства дополнительной связи 1:N',min_value=0.,max_value=1.,value=float(w['secondary_drop']),step=.01)
         st.caption('Сегментация RuBERT')
         s=settings['segmentation']
         for key,label in [('batch_size','Батч RuBERT'),('context_size','Контекст RuBERT, символов'),('max_length','Лимит токенов RuBERT')]:

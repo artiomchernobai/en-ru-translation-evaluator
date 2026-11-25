@@ -97,15 +97,35 @@ def lexical_signals(words, block, glossary):
     if word['status'] == 'computed':
         links = word['methods'][words['selected_method']]
         spans = {}
+        uncertain = {}
         for side, doc in [('source', source), ('target', target)]:
             linked = {link[side+'_token_id'] for link in links}
             selected = [doc['tokens'][i] for i in block[side]['token_ids']
                         if i not in linked and not doc['tokens'][i]['is_punctuation']
                         and doc['tokens'][i]['text'].casefold() not in STOP.get(doc['language'], set())
                         and len(doc['tokens'][i]['text']) > 1]
+            uncertain[side] = []
+            if 'link_evidence' in word:
+                from src.processing.alignment.link_evidence import token_evidence
+                lexical = [i for i in block[side]['token_ids'] if not doc['tokens'][i]['is_punctuation']]
+                boundaries = set()
+                sentence_indices = block[side]['sentence_indices']
+                if lexical and sentence_indices[0]>0: boundaries.add(lexical[0])
+                if lexical and sentence_indices[-1]<len(doc['sentences'])-1: boundaries.add(lexical[-1])
+                reliable_absence = []
+                for t in selected:
+                    state, weak = token_evidence(word,side,t['token_id'],words['selected_method'])
+                    if state=='filter_rejected' or weak or t['token_id'] in boundaries:
+                        uncertain[side].append(locate(doc,t['sentence_index'],t['sentence_char_start'],t['sentence_char_end']))
+                    else: reliable_absence.append(t)
+                selected = reliable_absence
             spans[side] = [locate(doc, t['sentence_index'], t['sentence_char_start'], t['sentence_char_end']) for t in selected]
         if spans['source'] or spans['target']:
             add('unlinked_content', 'Содержательные токены без связей SimAlign; это не доказательство пропуска.', spans['source'], spans['target'], 10)
+        if uncertain['source'] or uncertain['target']:
+            # Correlated word signals must not increase priority by being counted twice.
+            weight = 0 if spans['source'] or spans['target'] else 3
+            add('word_alignment_uncertain', 'Нет принятой связи: фильтрация, значимые альтернативы или граница группы. Сначала проверить выравнивание, это не признак пропуска перевода.', uncertain['source'], uncertain['target'], weight)
     elif word['status'] == 'skipped_too_long':
         add('word_alignment_unavailable', 'Выравнивание слов для группы не вычислено.', [], [], 5)
     return signals

@@ -32,6 +32,9 @@ def application(tmp_path, request):
     data = WordAligner(Backend()).align(src, tgt, [
         {'source_indices': [i], 'target_indices': [i], 'cost': .2} for i in range(3)])
     output = tmp_path/'data/word_alignment/test.json'
+    if getattr(request, 'param', None) == 'weak':
+        data['blocks'][0]['word_alignment']['token_map']['source'][1]['alternatives'] = [
+            {'token_id':2,'similarity':.52}]
     output.parent.mkdir(parents=True)
     output.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
     from src.processing.evaluation.windows import build_windows
@@ -99,6 +102,24 @@ def application(tmp_path, request):
             proc.terminate()
             try: proc.wait(timeout=10)
             except subprocess.TimeoutExpired: proc.kill();proc.wait()
+
+
+@pytest.mark.parametrize('application', ['weak'], indirect=True)
+def test_weak_alternatives_are_distinct_and_can_be_disabled(application):
+    with playwright.sync_playwright() as p:
+        executable = os.environ.get('CHROMIUM_PATH') or shutil.which('chromium')
+        with p.chromium.launch(executable_path=executable, headless=True, args=['--no-sandbox']) as browser:
+            page = browser.new_page(viewport={'width':1600,'height':1000})
+            page.goto(application)
+            page.get_by_role('button',name='Связи слов',exact=True).click()
+            source,target=page.locator('section.pane').nth(0),page.locator('section.pane').nth(1)
+            source.locator('[data-id="1"]').click()
+            playwright.expect(target.locator('[data-id="1"]')).to_contain_class('related')
+            playwright.expect(target.locator('[data-id="2"]')).to_contain_class('weak-related')
+            assert '0.520' in target.locator('[data-id="2"]').get_attribute('title')
+            page.get_by_text('Показывать слабые соответствия',exact=True).click()
+            playwright.expect(page.get_by_label('Показывать слабые соответствия',exact=True)).not_to_be_checked()
+            playwright.expect(target.locator('.weak-related')).to_have_count(0)
 
 
 def test_click_links_themes_layout_and_safe_text(application):

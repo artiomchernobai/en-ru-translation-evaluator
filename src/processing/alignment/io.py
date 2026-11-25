@@ -19,7 +19,7 @@ def configured_word_aligner(root=None) -> WordAligner:
     from src.processing.pipeline.config import ROOT
     options=read_settings(root or ROOT)['word_alignment']
     return WordAligner(SimAlignBackend(model=options['model'],device=options['device'],layer=options['layer'],
-                       min_similarity=options['min_similarity'],min_margin=options['min_margin']),
+                       min_similarity=options['min_similarity'],min_margin=options['min_margin'], secondary_drop=options['secondary_drop']),
                        selected_method=options['method'])
 
 

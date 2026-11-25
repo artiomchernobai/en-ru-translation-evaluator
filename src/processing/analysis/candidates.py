@@ -63,7 +63,7 @@ def collect_candidates(words, comet, *, low_quantile=.1, high_quantile=.9, gloss
                            'links': deepcopy(blocks[i]['word_alignment'].get('methods', {}).get(words['selected_method'], []))}
                           for i in window['group_indices']]})
     candidates.sort(key=lambda item: (-item['priority'], item['group_index']))
-    result = {'schema_version': 1, 'analysis_version': 'candidate_rules_ru_en_v1',
+    result = {'schema_version': 1, 'analysis_version': 'candidate_rules_ru_en_v2',
             'semantic_analysis': 'not_run',
             'window_config': deepcopy(comet.get('window_config', {'strategy': 'fixed', 'radius': comet['radius']})), 'source_document': words['source']['document_id'],
             'target_document': words['target']['document_id'],
@@ -71,7 +71,7 @@ def collect_candidates(words, comet, *, low_quantile=.1, high_quantile=.9, gloss
             'selected_word_method': words['selected_method'],
             'configuration': {'low_comet_quantile': low_quantile, 'high_vecalign_quantile': high_quantile,
                               'low_comet_threshold': low, 'high_vecalign_threshold': high,
-                              'glossary': deepcopy(glossary)},
+                              'glossary': deepcopy(glossary), 'word_uncertainty': {'minimum_similarity': .45, 'maximum_best_drop': .1, 'weight': 3}},
             'summary': {'groups': len(blocks), 'candidate_groups': len(candidates),
                         'semantic_tasks': len(tasks), 'semantic_groups_checked': 0,
                         'signal_count': sum(len(c['signals']) for c in candidates)},

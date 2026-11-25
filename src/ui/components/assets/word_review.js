@@ -11,16 +11,20 @@ export default function(component){
   root._selection={side,id:token.id};
   root.querySelectorAll('.word[aria-pressed="true"]').forEach(w=>w.setAttribute('aria-pressed','false'));
   nodes[side].get(token.id).setAttribute('aria-pressed','true');
-  root.querySelectorAll('.selected,.related').forEach(el=>{if(el.classList.contains('word'))el.classList.remove('selected','related');});
+  root.querySelectorAll('.weak-related').forEach(el=>el.removeAttribute('title'));
+  root.querySelectorAll('.selected,.related,.weak-related').forEach(el=>{if(el.classList.contains('word'))el.classList.remove('selected','related','weak-related');});
   nodes[side].get(token.id).classList.add('selected');
   const peers=token.partners.map(id=>nodes[opposite[side]].get(id)).filter(Boolean);
   peers.forEach(el=>el.classList.add('related'));
-  if(peers.length){
-   const pane=texts[opposite[side]],r=peers[0].getBoundingClientRect(),p=pane.getBoundingClientRect();
+  const weak=(token.weak_partners||[]).map(a=>({node:nodes[opposite[side]].get(a.id),score:a.similarity})).filter(a=>a.node);
+  weak.forEach(a=>{a.node.classList.add('weak-related');a.node.title='Слабое соответствие · cosine '+a.score.toFixed(3)+' · не подтверждение перевода';});
+  const focus=peers[0]||(weak[0]&&weak[0].node);
+  if(focus){
+   const pane=texts[opposite[side]],r=focus.getBoundingClientRect(),p=pane.getBoundingClientRect();
    if(r.top<p.top||r.bottom>p.bottom)pane.scrollTop+=r.top-p.top-p.height/2;
   }
-  const descriptions={unlinked:'Связей не найдено',sentence_unaligned:'Группа предложений без пары',not_processed:'Блок не обработан моделью'};
-  status.textContent=token.text+' · '+(peers.length?'Связей: '+peers.length:(descriptions[token.state]||'Связей не найдено'));
+  const descriptions={filter_rejected:'Пара предложена моделью, отклонена фильтром',model_unlinked:'Модель не предложила пару',unlinked:'Связей не найдено',sentence_unaligned:'Группа предложений без пары',not_processed:'Блок не обработан моделью'};
+  status.textContent=token.text+' · '+(peers.length?'Связей: '+peers.length:(descriptions[token.state]||'Связей не найдено'))+(weak.length?' · Слабых альтернатив: '+weak.length:'');
  }
  for(const side of ['source','target']){
   const payload=data.panes[side],pane=document.createElement('section'),header=document.createElement('div'),body=document.createElement('div');

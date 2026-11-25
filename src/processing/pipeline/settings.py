@@ -10,7 +10,7 @@ DEFAULTS = {
     'external_tools': {'backend': '', 'laser_python': '', 'vecalign_python': '',
                        'wsl_project_dir': '', 'vecalign_script': '', 'overlap_script': ''},
     'word_alignment': {'model': 'bert', 'device': 'cpu', 'layer': 8, 'method': 'itermax',
-                       'min_similarity': .55, 'min_margin': .02},
+                       'min_similarity': .55, 'min_margin': .02, 'secondary_drop': .12},
     'segmentation': {'batch_size': 8, 'context_size': 200, 'max_length': 256, 'threshold': .5},
 }
 
@@ -35,7 +35,7 @@ def read_settings(root):
     v['deletion_percentile'] = validate_deletion_percentile(v['deletion_percentile'])
     if w['method'] not in ('inter','itermax','mwmf') or w['device'] not in ('cpu','cuda'): raise ValueError('Invalid word alignment method/device')
     if not isinstance(w['model'],str) or not w['model'].strip() or type(w['layer']) is not int or w['layer']<0: raise ValueError('Invalid encoder settings')
-    for k in ('min_similarity','min_margin'):
+    for k in ('min_similarity','min_margin','secondary_drop'):
         if type(w[k]) not in (int,float) or not 0<=w[k]<=1: raise ValueError(f'Invalid {k}')
     if any(type(s[k]) is not int or s[k]<1 for k in ('batch_size','context_size','max_length')) or not 0<=s['threshold']<=1: raise ValueError('Invalid segmentation settings')
     return result

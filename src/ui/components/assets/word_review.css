@@ -12,3 +12,8 @@
 .word.current-block{box-shadow:inset 0 -2px color-mix(in srgb,#449bdc 45%,transparent)}
 .legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;line-height:1.5;padding:4px 0}.swatch{padding:0 4px;border-radius:3px}.swatch.unlinked{background:color-mix(in srgb,#ea8b26 24%,transparent)}.swatch.unknown{border-bottom:1px dashed #9299a4}.selection{margin-left:auto}
 @media(max-width:650px){.panes{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.selection{margin-left:0}}
+
+.word.model_unlinked{background:color-mix(in srgb,#ea8b26 24%,transparent);text-decoration:underline dotted #ea8b26}
+.word.filter_rejected{background:color-mix(in srgb,#b49bdf 22%,transparent);text-decoration:underline dashed #ad82e0}
+.word.weak-related,.swatch.weak-related{background:color-mix(in srgb,#be9cf5 28%,var(--st-background-color));outline:1px dashed #9471c7}
+.swatch.filter_rejected{background:color-mix(in srgb,#b49bdf 22%,transparent)}
