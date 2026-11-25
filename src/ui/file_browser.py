@@ -22,8 +22,8 @@ def available_files(root: Path) -> list[Path]:
     )
 
 
-def safe_file(root: Path, relative: str) -> Path:
-    """Only files under the project's data folder may be opened."""
+def safe_file(root: Path, relative: str, *, max_bytes: int | None = MAX_BYTES) -> Path:
+    """Validate data paths; dedicated analyzers may opt out of the preview size cap."""
     base = (root / "data").resolve()
     p = (root / relative).resolve()
     if not p.is_relative_to(base):
@@ -32,8 +32,9 @@ def safe_file(root: Path, relative: str) -> Path:
         raise ValueError(f"Неподдерживаемый формат: {p.suffix}")
     if not p.is_file():
         raise FileNotFoundError(p)
-    if p.stat().st_size > MAX_BYTES:
-        raise ValueError("Файл превышает 15 МБ — используйте отдельный анализатор.")
+    if max_bytes is not None and p.stat().st_size > max_bytes:
+        raise ValueError(f"Файл превышает {max_bytes / (1024 * 1024):g} МБ. "
+                         "Результаты этапов открывайте на соответствующей странице анализа.")
     return p
 
 

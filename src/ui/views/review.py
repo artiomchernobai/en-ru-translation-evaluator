@@ -8,9 +8,10 @@ from src.ui.review_model import review_payload, validate_review
 from src.ui.components.word_review import show_word_review
 
 
-@st.cache_data(show_spinner=False, max_entries=6)
+@st.cache_data(show_spinner=False, max_entries=1)
 def _read(path: str, mtime: int, size: int) -> dict:
-    data=json.loads(Path(path).read_text(encoding='utf-8-sig'))
+    with Path(path).open(encoding='utf-8-sig') as stream:
+        data=json.load(stream)
     validate_review(data)
     return data
 
@@ -25,8 +26,11 @@ def render_review(root: Path) -> None:
     method=b.selectbox('Метод просмотра',['itermax','inter','mwmf'],label_visibility='collapsed',key='review_method')
     mode=c.selectbox('Область текста',['Весь текст','Фрагмент'],label_visibility='collapsed',key='review_mode')
     try:
-        path=safe_file(root,str(chosen.relative_to(root)))
-        data=_read(str(path),path.stat().st_mtime_ns,path.stat().st_size)
+        # Generated token maps can exceed the generic text/JSON preview limit.
+        path=safe_file(root,str(chosen.relative_to(root)),max_bytes=None)
+        stat=path.stat()
+        with st.spinner('Загрузка и проверка выравнивания…'):
+            data=_read(str(path),stat.st_mtime_ns,stat.st_size)
         if not data['blocks']:
             st.info('В файле нет фрагментов для проверки.');return
         a,b=st.columns([2,5],gap='small')
