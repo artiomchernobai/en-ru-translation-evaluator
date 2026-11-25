@@ -33,12 +33,18 @@ def render_review(root: Path) -> None:
             data=_read(str(path),stat.st_mtime_ns,stat.st_size)
         if not data['blocks']:
             st.info('В файле нет фрагментов для проверки.');return
-        a,b=st.columns([2,5],gap='small')
+        a,b,c=st.columns([2,5,3],gap='small')
         number=a.number_input('Фрагмент',min_value=1,max_value=len(data['blocks']),value=1,step=1,label_visibility='collapsed',key=f'review_block_{path.name}_{path.stat().st_mtime_ns}')
         block_id=int(number)-1
         block=data['blocks'][block_id]
         b.caption(f"Фрагмент {number}/{len(data['blocks'])} · Vecalign {block['vecalign_cost']:.3f} · {block['word_alignment']['status']}")
+        show_weak=c.checkbox('Показывать слабые соответствия',value=True,key='review_weak')
         with st.expander('Покрытие группы и альтернативы токенов'):
+            weak_minimum=st.slider('Минимальное сходство слабого соответствия',0.,1.,.45,.01,key='review_weak_min')
+            st.caption('Показаны до трёх альтернатив, отстающих от лучшей не более чем на 0.10. Это сходство эмбеддингов, не подтверждение перевода.')
+            st.json(block['word_alignment'].get('link_evidence',{}).get(method,[]))
+            if 'link_evidence' not in block['word_alignment']:
+                st.info('В старом файле нет исходных предложений модели и причин фильтрации. Для их получения повторите этап выравнивания слов.')
             st.caption('Покрытие — доля лексических токенов с принятой связью; не оценка верности перевода. Пустая сторона не считается ошибкой вычисления.')
             links=block['word_alignment'].get('methods',{}).get(method,[])
             for side in ('source','target'):
@@ -51,7 +57,9 @@ def render_review(root: Path) -> None:
                 other='target' if side=='source' else 'source'
                 for entry in entries:
                     entry['matches']=[l[other+'_token_id'] for l in links if l[side+'_token_id']==entry['token_id']]
-                    if block['word_alignment']['status']=='computed':entry['status']='linked' if entry['matches'] else 'no_reliable_match'
+                    if block['word_alignment']['status']=='computed':
+                        from src.processing.alignment.link_evidence import token_evidence
+                        entry['status']='linked' if entry['matches'] else token_evidence(block['word_alignment'],side,entry['token_id'],method)[0]
             st.caption(f"Просмотр: {method}. Для кандидатов сохранён метод {data['selected_method']}; измените его на странице настроек и пересчитайте этап.")
             st.json(token_map)
         raw={}
@@ -64,7 +72,8 @@ def render_review(root: Path) -> None:
             except (ValueError,OSError):
                 raw[side]=None
         payload=review_payload(data,method=method,raw_texts=raw,
-                               block_id=block_id if mode=='Фрагмент' else None,focus_block=block_id)
+                               block_id=block_id if mode=='Фрагмент' else None,focus_block=block_id,
+                               show_weak=show_weak,weak_minimum=weak_minimum)
         if any('исходник отличается' in pane['label'] for pane in payload['panes'].values()):
             st.warning('Исходный файл отличается от данных выравнивания. Для него показан нормализованный текст с проверенными смещениями.')
         show_word_review(payload,key='word_review')

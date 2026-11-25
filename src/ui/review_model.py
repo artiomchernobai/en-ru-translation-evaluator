@@ -67,6 +67,48 @@ def validate_review(data: dict) -> None:
                     token_id = link.get(f'{side}_token_id')
                     if type(token_id) is not int or token_id not in block[side]['token_ids']:
                         raise ValueError('Связь указывает за пределы блока')
+        if not isinstance(word.get('link_evidence', {}),dict) or not isinstance(word.get('token_map', {}),dict):
+            raise ValueError('Некорректная диагностика токенов')
+        for method, records in word.get('link_evidence', {}).items():
+            if method not in METHODS or not isinstance(records, list):
+                raise ValueError('Некорректная диагностика связей')
+            accepted = set()
+            proposals = set()
+            for r in records:
+                if not isinstance(r,dict):
+                    raise ValueError('Некорректная запись диагностики')
+                pair = tuple(r.get(side+'_token_id') for side in ('source','target'))
+                if any(type(i) is not int or i not in block[side]['token_ids'] for side,i in zip(('source','target'),pair)):
+                    raise ValueError('Диагностика связи вне блока')
+                if pair in proposals or type(r.get('accepted')) is not bool or not isinstance(r.get('reasons'),list):
+                    raise ValueError('Некорректное решение фильтра')
+                proposals.add(pair)
+                if any(type(r.get(k)) not in (int,float) or not math.isfinite(r[k]) for k in ('similarity','margin')):
+                    raise ValueError('Некорректные оценки связи')
+                if r['accepted']:
+                    if r.get('role') not in ('primary','secondary') or r['reasons']:
+                        raise ValueError('Некорректная принятая связь')
+                    accepted.add(pair)
+                elif not r['reasons']:
+                    raise ValueError('Нет причины отклонения связи')
+            expected = {(r['source_token_id'],r['target_token_id']) for r in methods.get(method,[])}
+            if accepted != expected:
+                raise ValueError('Диагностика не соответствует принятым связям')
+        for side, entries in word.get('token_map', {}).items():
+            if side not in seen or not isinstance(entries,list):
+                raise ValueError('Некорректная карта альтернатив')
+            other = 'target' if side=='source' else 'source'
+            for entry in entries:
+                if not isinstance(entry,dict) or not isinstance(entry.get('alternatives',[]),list):
+                    raise ValueError('Некорректная запись альтернатив')
+                if type(entry.get('token_id')) is not int or entry['token_id'] not in block[side]['token_ids']:
+                    raise ValueError('Токен альтернатив вне блока')
+                for a in entry.get('alternatives',[]):
+                    if not isinstance(a,dict):
+                        raise ValueError('Некорректная альтернатива токена')
+                    if (type(a.get('token_id')) is not int or a['token_id'] not in block[other]['token_ids']
+                        or type(a.get('similarity')) not in (int,float) or not math.isfinite(a['similarity']) or not -1<=a['similarity']<=1):
+                        raise ValueError('Некорректная альтернатива токена')
     for side in seen:
         if seen[side] != set(range(len(data[side]['tokens']))):
             raise ValueError(f'Не все токены принадлежат блокам: {side}')
@@ -100,8 +142,11 @@ def original_projection(doc: dict, raw: str | None) -> tuple[str, list[tuple[int
 
 
 def review_payload(data: dict, *, method: str = 'itermax', raw_texts: dict | None = None,
-                   block_id: int | None = None, focus_block: int | None = None) -> dict:
+                   block_id: int | None = None, focus_block: int | None = None,
+                   show_weak: bool = True, weak_minimum: float = .45, weak_delta: float = .1) -> dict:
     validate_review(data)
+    if not 0<=weak_minimum<=1 or not 0<=weak_delta<=1:
+        raise ValueError('Некорректные пороги слабых соответствий')
     if method not in METHODS:
         raise ValueError('Неизвестный метод')
     if block_id is not None and not 0 <= block_id < len(data['blocks']):
@@ -112,7 +157,7 @@ def review_payload(data: dict, *, method: str = 'itermax', raw_texts: dict | Non
         doc = data[side]
         text, spans, label = original_projection(doc, (raw_texts or {}).get(side))
         tokens = [{'id': token['token_id'], 'text': token['text'], 'start': a, 'end': b,
-                   'partners': [], 'state': 'not_processed', 'block': None}
+                   'partners': [], 'weak_partners': [], 'state': 'not_processed', 'block': None}
                   for token, (a, b) in zip(doc['tokens'], spans)]
         result['panes'][side] = {'text': text, 'tokens': tokens, 'label': label,
                                  'document_id': doc.get('document_id', side)}
@@ -131,6 +176,17 @@ def review_payload(data: dict, *, method: str = 'itermax', raw_texts: dict | Non
                 token = result['panes'][side]['tokens'][link[f'{side}_token_id']]
                 token['partners'].append(link[f'{other}_token_id'])
                 token['state'] = 'linked'
+        if word['status']=='computed':
+            from src.processing.alignment.link_evidence import token_evidence
+            for side in ('source','target'):
+                for tid in block[side]['token_ids']:
+                    token = result['panes'][side]['tokens'][tid]
+                    state, alternatives = token_evidence(word,side,tid,method,
+                                                         weak_minimum=weak_minimum,weak_delta=weak_delta)
+                    if not token['partners']: token['state'] = state
+                    if show_weak:
+                        token['weak_partners'] = [{'id':a['token_id'],'similarity':a['similarity']} for a in alternatives
+                                                  if a['token_id'] not in token['partners']]
     if block_id is not None:
         for pane in result['panes'].values():
             chosen = [t for t in pane['tokens'] if t['block'] == block_id]

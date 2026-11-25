@@ -41,7 +41,8 @@ def test_token_map_scores_and_null_matches_use_one_encoder_pass():
     result=WordAligner(backend).align(doc('s','ru','один два'),doc('t','en','one two'),[{'source_indices':[0],'target_indices':[0],'cost':.1}])
     aligner.get_word_aligns.assert_called_once()
     word=result['blocks'][0]['word_alignment']
-    assert word['token_map']['source'][1]['status']=='no_reliable_match'
+    assert word['token_map']['source'][1]['status']=='filter_rejected'
+    assert word['link_evidence']['itermax'][1]['reasons']==['low_similarity']
     assert word['token_map']['source'][1]['matches']==[]
     assert word['coverage']['symmetric']==.5
     assert word['methods']['itermax'][0]['similarity']>.89

@@ -7,14 +7,15 @@ from .words import BlockTooLongError
 
 
 class SimAlignBackend:
-    def __init__(self, model: str = "bert", *, device: str = "cpu", layer: int = 8, min_similarity: float = .55, min_margin: float = .02):
+    def __init__(self, model: str = "bert", *, device: str = "cpu", layer: int = 8, min_similarity: float = .55, min_margin: float = .02, secondary_drop: float = .12):
         if not model or not isinstance(model, str):
             raise ValueError("SimAlign model must be a model name or local path")
         if type(layer) is not int or layer < 0:
             raise ValueError("SimAlign layer must be a nonnegative integer")
-        if any(type(v) not in (float,int) or not 0<=v<=1 for v in (min_similarity,min_margin)): raise ValueError('Invalid similarity thresholds')
+        if any(type(v) not in (float,int) or not 0<=v<=1 for v in (min_similarity,min_margin,secondary_drop)): raise ValueError('Invalid similarity thresholds')
         self.model, self.device, self.layer = model, device, layer
         self.min_similarity, self.min_margin = min_similarity, min_margin
+        self.secondary_drop = secondary_drop
         self.last_token_map = None
         self._aligner = None
 
@@ -28,6 +29,7 @@ class SimAlignBackend:
                 "device": self.device, "layer": self.layer, "token_type": "word",
                 "matching_methods": ["inter", "mwmf", "itermax"], "confidence_scores": False, "similarity_scores": True, "score_type": "cosine_similarity_not_probability",
                 "min_similarity": self.min_similarity, "min_margin": self.min_margin,
+                "secondary_drop": self.secondary_drop, "filter_version": 2,
                 "resolved_model": getattr(self._aligner, 'model', None),
                 "model_revision": getattr(self._aligner.embed_loader.emb_model.config, '_commit_hash', None)
                 if self._aligner is not None else None}
@@ -80,15 +82,12 @@ class SimAlignBackend:
         if scores.shape != (len(source),len(target)) or not np.isfinite(scores).all():raise ValueError('Invalid SimAlign similarity matrix')
         scores = np.clip(scores,-1,1)
         self.last_scores = scores
-        def margin(i,j):
-            row = np.delete(scores[i],j)
-            column = np.delete(scores[:,j],i)
-            return max(float(scores[i,j])-(float(row.max()) if len(row) else -1),
-                       float(scores[i,j])-(float(column.max()) if len(column) else -1))
         self.last_token_map = {}
         for side, matrix in [('source',scores),('target',scores.T)]:
             self.last_token_map[side] = [
                 [{'index':int(j),'similarity':float(row[j])} for j in np.argsort(-row)[:3]]
                 for row in matrix]
-        return {method:[(i,j) for i,j in pairs if scores[i,j]>=self.min_similarity and margin(i,j)>=self.min_margin]
-                for method,pairs in raw.items()}
+        from .link_evidence import filter_links
+        accepted, self.last_link_evidence = filter_links(raw, scores, self.min_similarity,
+                                                        self.min_margin, self.secondary_drop)
+        return accepted

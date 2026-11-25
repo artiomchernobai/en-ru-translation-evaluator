@@ -160,6 +160,13 @@ class WordAligner:
                         raise ValueError(f"Backend did not return {self.selected_method}")
                     word['methods'] = {name: _links(links, src_ids, tgt_ids) for name, links in raw.items()}
                     word['status'] = 'computed'
+                    evidence = getattr(self.backend, 'last_link_evidence', None)
+                    if evidence is not None:
+                        word['link_evidence'] = {
+                            method: [dict(r, source_token_id=src_ids[r['source_index']],
+                                          target_token_id=tgt_ids[r['target_index']]) for r in records]
+                            for method, records in evidence.items()}
+
                     scores = getattr(self.backend, 'last_scores', None)
                     if scores is not None:
                         for links in word['methods'].values():
@@ -208,6 +215,11 @@ class WordAligner:
                         for alternative in entry['alternatives']: alternative['text']=other['tokens'][alternative['token_id']]['text']
                         entry['matches'] = mapping[entry['token_id']]
                         entry['status'] = ('linked' if entry['matches'] else 'no_reliable_match') if word['status']=='computed' else ('sentence_unaligned' if status!='aligned' else 'not_processed')
+                        if word['status']=='computed' and not entry['matches'] and 'link_evidence' in word:
+                            from .link_evidence import token_evidence
+                            entry['status'], weak = token_evidence(word, side, entry['token_id'], self.selected_method)
+                            entry['has_significant_alternatives'] = bool(weak)
+
             blocks.append({"block_id": block_id, "sentence_alignment_status": status,
                            "sentence_alignment_review": "unreviewed", "vecalign_cost": group['cost'],
                            "source": sides[0], "target": sides[1], "word_alignment": word})
