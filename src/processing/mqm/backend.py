@@ -5,7 +5,7 @@ import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
-from .prompt import messages, PROMPT_VERSION
+from .prompt import messages, verification_messages, PROMPT_VERSION
 from .errors import MQMRequestError
 
 
@@ -27,12 +27,18 @@ class LocalMQMBackend:
         self.api_key_env=api_key_env
         self.metadata={'name':self.model,'base_url':base_url.rstrip('/'),'prompt_version':PROMPT_VERSION,
                        'temperature':0,'include_word_links':self.include_word_links,'max_retries':max_retries,'max_output_tokens':max_tokens,'json_mode':self.json_mode,
-                       'assessment':'automated_reference_free_mqm_proposals'}
+                       'assessment':'automated_reference_free_mqm_proposals','confirmation_policy':'omissions_and_major_critical_v1'}
 
     def judge(self, request):
+        return self._send(request)
+
+    def verify(self, request, proposals):
+        return self._send(request, proposals)
+
+    def _send(self, request, proposals=None):
         started=time.perf_counter()
         self.last_usage=None
-        body={'model':self.model,'messages':messages(request,include_word_links=self.include_word_links),'temperature':0,'max_tokens':self.max_tokens,'stream':False}
+        body={'model':self.model,'messages':(verification_messages(request,proposals) if proposals is not None else messages(request,include_word_links=self.include_word_links)),'temperature':0,'max_tokens':self.max_tokens,'stream':False}
         if self.json_mode:body['response_format']={'type':'json_object'}
         headers={'Content-Type':'application/json'}
         token=os.environ.get(self.api_key_env)
@@ -69,7 +75,7 @@ class LocalMQMBackend:
                     and any(k in detail.lower() for k in ('response_format','json_object'))):
                 fallback=type(self)(model=self.model,base_url=self.metadata['base_url'],timeout=self.timeout,
                                     max_tokens=self.max_tokens,json_mode=False,api_key_env=self.api_key_env,max_retries=self.max_retries,include_word_links=self.include_word_links)
-                try:return fallback.judge(request)
+                try:return fallback._send(request,proposals)
                 finally:self.last_usage=getattr(fallback,'last_usage',None)
             context_error=error.code in (400,413,422) and any(k in detail.lower() for k in ('context','token','too long','too large'))
             raise MQMRequestError(f'MQM server HTTP {error.code}: {detail or error.reason}',fatal=not context_error) from error

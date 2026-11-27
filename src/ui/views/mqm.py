@@ -64,6 +64,8 @@ def render_mqm(root: Path):
                             indicator=lambda f:f"№{f['group_index']} · {f['status']} · якоря {f['anchor_group_indices']}")
         if fragment['status']=='not_analyzed':st.info('Для этого подозрительного фрагмента вердикт модели пока отсутствует.')
         elif fragment['status']=='completed' and not findings:st.info('Модель не предложила подтверждаемых цитатами ошибок; это не гарантия правильности перевода.')
+        if fragment.get('confirmation'):
+            st.caption(f"Повторная проверка моделью: {fragment['confirmation']} · требует проверки человеком")
         shown=records if chosen=='__all__' else [by_id[chosen]]
         with st.container(height=110 if len(shown)>2 else 'content',border=False):
             for record in shown:
@@ -94,6 +96,10 @@ def render_mqm_settings(root: Path):
             limit=st.number_input('Максимум фрагментов за запуск (0 — все)',min_value=0,value=int(settings.get('max_fragments',0)))
             priority=st.number_input('Минимальный приоритет кандидата',min_value=0,max_value=100,value=int(settings.get('min_priority',0)))
             links=st.checkbox('Передавать компактные связи подозрительных слов (до 48)',value=bool(settings.get('include_word_links',False)))
+            merge_windows=st.checkbox('Объединять сильно перекрывающиеся окна MQM',value=bool(settings.get('merge_windows',True)))
+            overlap=st.number_input('Минимальное пересечение окон (Jaccard обеих сторон)',min_value=.5,max_value=1.,value=float(settings.get('merge_overlap',.75)),step=.05)
+            merge_chars=st.number_input('Максимум символов объединённого фрагмента',min_value=1000,max_value=100000,value=int(settings.get('merge_max_chars',12000)))
+            st.caption('Пропуски и major/critical проходят отдельную проверку моделью. Лимит объединения — символы обеих сторон, не токены модели. Текст не обрезается.')
             retries=st.number_input('Повторных попыток исправления ответа',min_value=0,max_value=2,value=int(settings.get('max_retries',1)))
             resume=st.checkbox('Продолжать с сохранённых фрагментов',value=bool(settings.get('resume',True)))
             st.caption('Предварительно загрузите модель в локальном сервере. Длинные или обрезанные ответы '
@@ -102,6 +108,6 @@ def render_mqm_settings(root: Path):
                 try:
                     LocalMQMBackend(model=model,base_url=url,timeout=timeout,max_tokens=int(tokens),json_mode=json_mode)
                     atomic_json(root/'data/mqm_settings.json',{'model':model,'base_url':url,'revision':revision,'scope':scope,
-                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries),'include_word_links':links,'max_fragments':int(limit),'min_priority':int(priority)})
+                                'timeout':timeout,'max_tokens':int(tokens),'json_mode':json_mode,'resume':resume,'max_retries':int(retries),'include_word_links':links,'max_fragments':int(limit),'min_priority':int(priority),'merge_windows':merge_windows,'merge_overlap':float(overlap),'merge_max_chars':int(merge_chars)})
                     st.success('Настройки сохранены')
                 except ValueError as error:st.error(str(error))

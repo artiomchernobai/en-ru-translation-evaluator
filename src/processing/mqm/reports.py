@@ -64,7 +64,7 @@ def compact_report(report):
     for raw in report['fragments']:
         fragment = {key: deepcopy(raw[key]) for key in (
             'group_index', 'fragment_id', 'anchor_group_indices', 'candidate_ids', 'priority', 'status',
-            'request_hash', 'reused', 'error', 'elapsed_seconds', 'context_group_indices') if key in raw}
+            'request_hash', 'reused', 'error', 'elapsed_seconds', 'context_group_indices', 'confirmation') if key in raw}
         for side in SIDES:
             fragment[side] = fragment_text(raw.get('context', {}).get(side, []))
         if 'fragment_id' not in fragment:
@@ -131,7 +131,7 @@ def restore_report(report, data):
 def diagnostics(report):
     fragments = []
     for f in report['fragments']:
-        value = {key: deepcopy(f[key]) for key in ('fragment_id', 'group_index', 'status', 'attempts', 'rejected', 'error') if key in f}
+        value = {key: deepcopy(f[key]) for key in ('fragment_id', 'group_index', 'request_hash', 'status', 'attempts', 'rejected', 'error', 'initial_proposals', 'confirmation_response', 'confirmation_error', 'confirmation_usage') if key in f}
         value['citation_resolutions'] = [
             {'section': section, 'item': i, 'side': side, **deepcopy(span)}
             for section in ('findings', 'observations') for i, record in enumerate(f[section])

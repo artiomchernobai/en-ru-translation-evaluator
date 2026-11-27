@@ -40,6 +40,11 @@ class TestJudge:
     __test__=False
     metadata={'name':'test-local','revision':'test','prompt_version':'test'}
     def __init__(self):self.judge=Mock(side_effect=self.answer)
+    def verify(self,request,proposals):
+        return {'decisions':[{'id':f'P{i}','verdict':'confirmed','explanation':'Тестовая повторная проверка находки.',
+                              'target_search':{'searched_refs':[f'T{s["index"]}' for s in request['target']['sentences']],
+                                               'counterpart_found':False,'explanation':'Проверены все предложения переданного фрагмента.'}}
+                             for i,p in enumerate(proposals)]}
     def answer(self,request):
         return {'findings':[finding()] if request['center_group_index']==0 else [],'observations':[]}
 

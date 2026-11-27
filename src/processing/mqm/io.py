@@ -14,7 +14,7 @@ from .reports import compact_report, restore_report, diagnostics
 def read_settings(root):
     path=Path(root)/'data/mqm_settings.json'
     settings=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision','max_retries','include_word_links','max_fragments','min_priority'}
+    allowed={'model','base_url','timeout','max_tokens','json_mode','scope','resume','revision','max_retries','include_word_links','max_fragments','min_priority','merge_windows','merge_overlap','merge_max_chars'}
     if not isinstance(settings,dict) or set(settings)-allowed:raise ValueError('Unsupported MQM settings')
     return settings
 
@@ -23,6 +23,9 @@ def configured_judge(settings):
     backend=LocalMQMBackend(model=settings.get('model',''),base_url=settings.get('base_url','http://127.0.0.1:1234/v1'),
                             timeout=settings.get('timeout',120),max_tokens=settings.get('max_tokens',2048),json_mode=settings.get('json_mode',True),max_retries=settings.get('max_retries',1),include_word_links=settings.get('include_word_links',False))
     backend.metadata['revision']=settings.get('revision','unspecified')
+    from .windows import DEFAULT_POLICY
+    backend.review_policy={k:settings.get(k,v) for k,v in DEFAULT_POLICY.items()}
+    backend.metadata['review_policy']=dict(backend.review_policy)
     return backend
 
 
@@ -59,6 +62,16 @@ def analyze_file(candidate_path, output_path, *, backend, scope='candidates', re
     if resume and output_path.exists():
         try:previous=restore_report(json.loads(output_path.read_text(encoding='utf-8')),data)
         except (ValueError,OSError,KeyError,TypeError,IndexError):pass
+    if previous is not None and diagnostics_path.exists():
+        try:
+            audit=json.loads(diagnostics_path.read_text(encoding='utf-8'))
+            if audit.get('run_fingerprint')==previous.get('run_fingerprint'):
+                by_hash={f['request_hash']:f for f in audit['fragments'] if f.get('request_hash')}
+                for fragment in previous['fragments']:
+                    saved=by_hash.get(fragment.get('request_hash'),{})
+                    for key in ('attempts','initial_proposals','confirmation_response','confirmation_error','confirmation_usage'):
+                        if key in saved:fragment[key]=saved[key]
+        except (ValueError,OSError,KeyError,TypeError,AttributeError):pass
     def save(report):
         report['inputs']={'candidates':{'path':str(candidate_path),'sha256':hashlib.sha256(payload).hexdigest()}}
         if corpus_payload is not None:report['inputs']['corpus']={'path':str(corpus_path),'sha256':hashlib.sha256(corpus_payload).hexdigest()}
