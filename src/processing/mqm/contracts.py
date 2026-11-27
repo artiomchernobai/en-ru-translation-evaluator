@@ -70,10 +70,21 @@ def validate_candidates(data):
     return data
 
 
-def make_request(data, group_index):
+def make_request(data, group_index, context_groups=None):
     task = data['semantic_tasks'][group_index]
     candidate = next((c for c in data['candidates'] if c['group_index']==group_index), None)
     window = task['window']
+    if context_groups is not None:
+        window = dict(window)
+        window['alignments'] = [data['semantic_tasks'][g]['window']['center_alignment'] for g in context_groups]
+        window['group_indices'] = list(context_groups)
+        for side in ('source','target'):
+            indices = sorted({i for g in window['alignments'] for i in g[side+'_indices']})
+            window[side] = {'sentence_indices':indices, 'sentences':[
+                {'index':i,'sentence_id':data[side]['sentences'][i]['sentence_id'],
+                 'text':data[side]['sentences'][i]['normalized_text']} for i in indices]}
+        task = dict(task, word_links=[next(link for link in data['semantic_tasks'][g]['word_links'] if link['group_index']==g)
+                                      for g in context_groups])
     result = {'center_group_index':group_index, 'source_language':data['source']['language'],
               'target_language':data['target']['language'], 'alignments':window['alignments'],
               'word_links':task['word_links'], 'hints':[{key:signal[key] for key in ('code','message','source_spans','target_spans')} for signal in candidate['signals']] if candidate else []}
@@ -171,6 +182,13 @@ def validate_judgment(raw, data, request):
                 if name=='findings' and original_category!=item['category']:record['model_category']=original_category
                 record.update(explanation=item['explanation'], source_spans=spans['source'],target_spans=spans['target'],
                               status='needs_review',citation_validation='passed',semantic_validation='model_only')
+                if name=='findings' and record['severity']=='critical':
+                    criterion=item.get('critical_criterion')
+                    impact=item.get('critical_consequence')
+                    if criterion not in ('core_plot_reversal','material_fact_reversal','systematic_unintelligibility') or not isinstance(impact,str) or len(impact.strip())<20:
+                        record.update(severity='major',critical_gate='downgraded_missing_consequence',model_severity='critical')
+                    else:
+                        record.update(critical_criterion=criterion,critical_consequence=impact,critical_gate='requires_confirmation')
                 if isinstance(item.get('suggestion'),str):record['suggestion']=item['suggestion']
                 destination.append(record)
             except (ValueError,TypeError,KeyError,AttributeError,IndexError) as error:

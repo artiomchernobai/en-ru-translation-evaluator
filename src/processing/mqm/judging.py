@@ -24,6 +24,8 @@ def judge_fragment(data, request, backend):
             print(f'[MQM] group {request["center_group_index"]}: invalid response: {error}',flush=True)
             outgoing['correction']={'instruction':'Return only a valid JSON object with findings/observations arrays; exact in-fragment citations required.', 'error':str(error)}
     if best is not None:
+        from .confirmation import confirm
+        best=confirm(data,request,best,backend)
         return {**best,'attempts':attempts,'status':'partial_invalid' if best['rejected'] else 'completed'}
     return {'status':'failed','error':attempts[-1]['error'],'attempts':attempts,
             'findings':[],'observations':[],'rejected':[]}

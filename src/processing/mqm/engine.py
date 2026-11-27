@@ -9,6 +9,7 @@ from .metrics import summarize, DEFAULT_WEIGHTS, fragment_metrics
 from .prompt import PROMPT_VERSION
 from .judging import judge_fragment
 from .errors import MQMRequestError
+from .windows import DEFAULT_POLICY, merge_units
 from src.processing.analysis.fragments import review_fragments
 
 
@@ -30,9 +31,13 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
         if not isinstance(group_indices,list) or any(type(i) is not int or i<0 for i in group_indices):raise ValueError('Invalid selected groups')
         units=[u for u in units if set(u['anchor_group_indices']).intersection(group_indices)]
         if not units:raise ValueError('Selected candidate is absent from this report')
+    policy={**DEFAULT_POLICY, **getattr(backend,'review_policy',{})}
+    if type(policy['merge_windows']) is not bool or type(policy['merge_overlap']) not in (int,float) or not .5<=policy['merge_overlap']<=1 or type(policy['merge_max_chars']) is not int or not 1000<=policy['merge_max_chars']<=100000:
+        raise ValueError('Invalid MQM window merging policy')
+    units=merge_units(data,units,policy)
     if max_fragments:units=units[:max_fragments]
     semantic_input={k:v for k,v in data.items() if k not in ('created_at','inputs','review_fragments')}
-    run_id=fingerprint({'input':semantic_input,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION})
+    run_id=fingerprint({'input':semantic_input,'backend':backend.metadata,'scope':scope,'weights':weights,'prompt':PROMPT_VERSION,'review_policy':policy})
     cache={}
     if isinstance(previous,dict) and previous.get('run_fingerprint')==run_id and isinstance(previous.get('fragments'),list):
         cache={f['request_hash']:f for f in previous['fragments'] if isinstance(f,dict)
@@ -41,7 +46,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
             'source':deepcopy(data['source']),'target':deepcopy(data['target']),
             'window_config':deepcopy(data.get('window_config',{})),
             'model':deepcopy(backend.metadata),'scope':scope,'assessment_unit':'entire_fragment','anchor_role':'navigation_only','run_fingerprint':run_id,
-            'selection':{'max_fragments':max_fragments,'min_priority':min_priority,'group_indices':group_indices},
+            'selection':{'max_fragments':max_fragments,'min_priority':min_priority,'group_indices':group_indices,'review_policy':policy},
             'status':'running','fragments':[],'findings':[],'metrics':{}}
     def update(status):
         report['status']=status
@@ -50,7 +55,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
     for position,unit in enumerate(units):
         index=unit['group_index']
         started=time.perf_counter()
-        request=make_request(data,index)
+        request=make_request(data,index,unit['context_group_indices'])
         request['hints']=[{k:s[k] for k in ('code','message','source_spans','target_spans')} for s in unit['signals']]
         request_hash=fingerprint(request)
         cached=cache.get(request_hash)
@@ -58,6 +63,18 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
             try:
                 validated=validate_judgment(cached,data,request)
                 if validated['rejected'] or any(key not in cached for key in ('group_index','source_sentence_indices','target_sentence_indices','observations')):cached=None
+                elif callable(getattr(backend,'verify',None)):
+                    for original, checked in zip(cached['findings'],validated['findings']):
+                        if (original['category']=='Accuracy/Omission' or original['severity'] in ('major','critical')) and original.get('semantic_validation')!='model_rechecked':
+                            cached=None
+                            break
+                        for key in ('semantic_validation','confirmation_status','critical_gate','critical_criterion','critical_consequence','model_severity'):
+                            if key in original:checked[key]=deepcopy(original[key])
+                    if cached is not None:
+                        for original,checked in zip(cached['observations'],validated['observations']):
+                            for key in ('semantic_validation','confirmation_status'):
+                                if key in original:checked[key]=original[key]
+
             except (ValueError,TypeError,KeyError):cached=None
         if cached:
             fragment=deepcopy(cached)
@@ -95,7 +112,7 @@ def analyze(data, backend, *, scope='candidates', weights=None, previous=None, p
             # A server/model failure should not produce hundreds of identical failed calls.
             for pending_unit in units[position+1:]:
                 pending=pending_unit['group_index']
-                pending_request=make_request(data,pending)
+                pending_request=make_request(data,pending,pending_unit['context_group_indices'])
                 report['fragments'].append({'group_index':pending,'status':'not_run_after_failure',
                                             'fragment_id':pending_unit['fragment_id'],
                                             'anchor_group_indices':pending_unit['anchor_group_indices'],
